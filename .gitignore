@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+
+# Resultados locales del benchmark
+bench/resultados/
+
+# Configuración local de Claude Code
+.claude/settings.local.json
+
+# Python (problemas MLE/RL del benchmark)
+__pycache__/
+.venv/
