@@ -1,6 +1,9 @@
 {
   "name": "skill-agents",
-  "owner": { "name": "Gonzalo Fuentes" },
+  "description": "Plugins de Gonzalo Fuentes para orquestar agentes en Claude Code.",
+  "owner": {
+    "name": "Gonzalo Fuentes"
+  },
   "plugins": [
     {
       "name": "orquestador",
