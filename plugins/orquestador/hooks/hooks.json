@@ -5,6 +5,18 @@
         "matcher": "Agent|Task",
         "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/pre-agent.mjs"], "timeout": 10 }]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/post-agent.mjs"], "timeout": 10 }]
+      }
+    ],
+    "SubagentStart": [
+      { "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/subagent-start.mjs"], "timeout": 10 }] }
+    ],
+    "SubagentStop": [
+      { "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/subagent-stop.mjs"], "timeout": 15 }] }
     ]
   }
 }
