@@ -72,8 +72,9 @@ test('tope de Fable: la tercera delegación a fable se niega', () => {
 test('heredar Fable del orquestador cuenta para el tope', () => {
   const e = estadoVacio('s');
   e.modeloPrincipal = 'fable';
-  decidirDelegacion(entrada({}, 'a'), e, { ...CONFIG_DEFECTO, fableMaxPorSesion: 1 }, null);
-  const r = decidirDelegacion(entrada({}, 'b'), e, { ...CONFIG_DEFECTO, fableMaxPorSesion: 1 }, null);
+  const hereda = { model: 'inherit' };
+  decidirDelegacion(entrada({}, 'a'), e, { ...CONFIG_DEFECTO, fableMaxPorSesion: 1 }, hereda);
+  const r = decidirDelegacion(entrada({}, 'b'), e, { ...CONFIG_DEFECTO, fableMaxPorSesion: 1 }, hereda);
   assert.match(r.denegar, /Tope de Fable/);
 });
 

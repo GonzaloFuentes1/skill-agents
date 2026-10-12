@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,9 +31,13 @@ export const contexto = (evento, texto) => ({
   hookSpecificOutput: { hookEventName: evento, additionalContext: texto },
 });
 
+// Compara rutas reales: si el plugin se invoca a través de un symlink o junction, argv[1] conserva el enlace
+// mientras import.meta.url ya viene resuelto, y una comparación literal apagaría el hook en silencio.
+const real = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
+
 export function esPrincipal(urlModulo, argv1 = process.argv[1]) {
   if (!argv1) return false;
-  const a = fileURLToPath(urlModulo);
-  const b = resolve(argv1);
+  const a = real(fileURLToPath(urlModulo));
+  const b = real(argv1);
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }

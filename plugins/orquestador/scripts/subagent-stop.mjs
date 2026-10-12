@@ -7,6 +7,7 @@ import { emitir } from './lib/eventos.mjs';
 import { familia, costoUSD } from './lib/modelos.mjs';
 import { leer } from './lib/campos.mjs';
 import { nombreBase } from './lib/agentes.mjs';
+import { hashPrompt, primerPrompt } from './lib/transcript.mjs';
 import { ejecutarHook, esPrincipal } from './lib/hook-io.mjs';
 
 const CAMPOS_USO = ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'];
@@ -33,17 +34,31 @@ export function extraerUso(texto, precios) {
   return { modeloReal, modelos: Object.keys(conteo), uso, costoUSD: costo };
 }
 
-export function cerrarDelegacion(entrada, estado, analisis, ahora = Date.now()) {
-  let id = Object.keys(estado.activas).find((k) => estado.activas[k].agentId === entrada.agent_id);
-  if (!id) {
-    const tipo = nombreBase(entrada.agent_type);
-    id = Object.keys(estado.activas)
-      .filter((k) => nombreBase(estado.activas[k].agente) === tipo)
-      .sort((x, y) => estado.activas[x].inicio - estado.activas[y].inicio)[0];
+// Emparejamiento: 1) por hash del prompt (exacto); 2) por agent_id asignado en SubagentStart;
+// 3) FIFO del mismo tipo entre las que no pertenecen a otro agente.
+function elegirDelegacion(entrada, estado, analisis) {
+  const ids = Object.keys(estado.activas);
+  const act = (k) => estado.activas[k];
+  const libre = (k) => !act(k).agentId || act(k).agentId === entrada.agent_id;
+  if (analisis?.promptHash) {
+    const porPrompt = ids.filter((k) => act(k).promptHash === analisis.promptHash);
+    const id = porPrompt.find(libre) ?? porPrompt[0];
+    if (id) return id;
   }
+  const porAgente = ids.find((k) => act(k).agentId === entrada.agent_id);
+  if (porAgente) return porAgente;
+  const tipo = nombreBase(entrada.agent_type);
+  return ids.filter((k) => nombreBase(act(k).agente) === tipo && libre(k)).sort((x, y) => act(x).inicio - act(y).inicio)[0];
+}
+
+export function cerrarDelegacion(entrada, estado, analisis, ahora = Date.now()) {
+  const id = elegirDelegacion(entrada, estado, analisis);
   if (!id) return { eventos: [], alerta: null };
   const a = estado.activas[id];
   delete estado.activas[id];
+  // Si SubagentStart (FIFO) le dio este agent_id a otra delegación, se libera para que empareje por prompt.
+  for (const otra of Object.values(estado.activas)) if (otra.agentId === entrada.agent_id) otra.agentId = null;
+  if (familia(analisis?.modeloReal) === 'fable' && !a.contadaFable) estado.fableUsados += 1;
   const u = analisis?.uso ?? {};
   const fin = {
     tipo: 'fin', session: estado.session, id, agentId: entrada.agent_id, agente: a.agente,
@@ -69,7 +84,12 @@ export async function manejar(entrada, env = process.env) {
   const config = cargarConfig(env);
   const ruta = leer.transcriptSubagente(entrada);
   let analisis = null;
-  if (ruta) { try { analisis = extraerUso(readFileSync(ruta, 'utf8'), config.precios); } catch { /* sin transcript legible */ } }
+  if (ruta) {
+    try {
+      const texto = readFileSync(ruta, 'utf8');
+      analisis = { ...extraerUso(texto, config.precios), promptHash: hashPrompt(primerPrompt(texto)) };
+    } catch { /* sin transcript legible */ }
+  }
   const r = await conEstado(entrada.session_id, (e) => cerrarDelegacion(entrada, e, analisis), env);
   for (const ev of r.eventos) emitir(ev, env);
   return r.alerta ? { systemMessage: `[orquestador] ${r.alerta}` } : null;

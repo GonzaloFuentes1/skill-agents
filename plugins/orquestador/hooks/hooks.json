@@ -19,6 +19,12 @@
         "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/post-agent.mjs"], "timeout": 10 }]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/post-agent-fallo.mjs"], "timeout": 10 }]
+      }
+    ],
     "SubagentStart": [
       { "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/subagent-start.mjs"], "timeout": 10 }] }
     ],

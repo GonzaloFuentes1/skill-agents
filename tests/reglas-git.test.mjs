@@ -75,6 +75,16 @@ const casos = [
   ['pr con atribución', 'gh pr create --title "feat: algo" --body "🤖 Generated with [Claude Code](https://claude.com/claude-code)"', ctx(), 'atribucion'],
   ['pr con título no conventional', 'gh pr create --title "Agrega cosas" --body "x"', ctx(), 'conventional'],
   ['pr con body-file limpio', 'gh pr create --title "feat: x" --body-file cuerpo.md', ctx('feat/a', { archivos: { 'cuerpo.md': 'Resumen\n' } }), null],
+  // I4: opciones globales de git antes del subcomando
+  ['-c antes de commit en main', 'git -c commit.gpgsign=false commit -m "Agregar algo"', ctx('main'), 'commit-en-protegida'],
+  ['-c core.hooksPath desactiva hooks', 'git -c core.hooksPath=/dev/null commit -m "feat: x"', ctx(), 'no-verify'],
+  ['--no-pager antes de commit', 'git --no-pager commit -m "Agregar"', ctx(), 'conventional'],
+  // I5: argumentos entre comillas conservan su valor
+  ['refspec entre comillas a main', 'git push origin "HEAD:main"', ctx(), 'push-a-protegida'],
+  ['refspec con comilla simple a main', "git push origin 'feat/x:main'", ctx(), 'push-a-protegida'],
+  ['force con refspec entre comillas', 'git push --force origin "+HEAD:main"', ctx(), 'force-push'],
+  ['switch a "main" y commit', 'git switch "main" && git commit -m "feat: x"', ctx(), 'commit-en-protegida'],
+  ['-m con texto que parece flag no es no-verify', 'git commit -m "-n"', ctx(), 'conventional'],
   ['comando sin git', 'ls -la', ctx('main'), null],
   ['git dentro de un echo', 'echo "git push origin main"', ctx('main'), null],
 ];

@@ -15,6 +15,17 @@ const MARCA = '# orquestador: hook generado por /orquestador:setup';
 const ATRIBUCION = { commit: '', pr: '', sessionUrl: false };
 const STATUS = [['statusLine', 'statusline.mjs'], ['subagentStatusLine', 'subagent-statusline.mjs']];
 
+// Distingue "no existe" (se parte de {}) de "no se pudo leer o parsear" (no se debe pisar). Tolera BOM (PowerShell 5.1).
+export function leerSettings(ruta) {
+  let texto;
+  try { texto = readFileSync(ruta, 'utf8'); } catch (e) {
+    return e.code === 'ENOENT' ? { ok: true, datos: {} } : { ok: false, error: `No se pudo leer ${ruta}: ${e.message}` };
+  }
+  try { return { ok: true, datos: JSON.parse(texto.replace(/^﻿/, '')) }; } catch (e) {
+    return { ok: false, error: `JSON inválido en ${ruta}: ${e.message}` };
+  }
+}
+
 export function fusionarSettings(actual, { binDir, reemplazarStatusline = false }) {
   const nuevo = structuredClone(actual ?? {});
   const cambios = [];
@@ -95,10 +106,11 @@ async function main(argv, env = process.env) {
   const iRepo = argv.indexOf('--repo');
   const repo = resolve(iRepo >= 0 ? argv[iRepo + 1] : process.cwd());
   const rutaSettings = join(homedir(), '.claude', 'settings.json');
-  let actual = {};
-  try { actual = JSON.parse(readFileSync(rutaSettings, 'utf8')); } catch { /* sin settings o ilegible */ }
+  const leido = leerSettings(rutaSettings);
   const binDir = join(dirBase(env), 'bin');
-  const { nuevo, cambios, conflictos } = fusionarSettings(actual, { binDir, reemplazarStatusline: argv.includes('--reemplazar-statusline') });
+  const { nuevo, cambios, conflictos } = leido.ok
+    ? fusionarSettings(leido.datos, { binDir, reemplazarStatusline: argv.includes('--reemplazar-statusline') })
+    : { nuevo: null, cambios: [], conflictos: [`${leido.error}. No se modificará; corrígelo y vuelve a correr setup.`] };
   const version = compararVersion(ejecutar('claude', ['--version']));
   const rutaHooks = ejecutar('git', ['-C', repo, 'rev-parse', '--git-path', 'hooks']);
   const dirHooks = rutaHooks ? resolve(repo, rutaHooks) : null;
