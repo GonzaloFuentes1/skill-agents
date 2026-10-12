@@ -1,0 +1,32 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+jobs:
+  pruebas:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --test
+  titulo-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Título en Conventional Commits y sin atribución de IA
+        env:
+          TITULO: ${{ github.event.pull_request.title }}
+          CUERPO: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$TITULO" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+' \
+            || { echo "El título del PR no sigue Conventional Commits"; exit 1; }
+          if printf '%s' "$CUERPO" | grep -Eiq 'co-authored-by:.*(claude|anthropic)|noreply@anthropic\.com|generated with \[?claude'; then
+            echo "El PR contiene atribución de IA"; exit 1
+          fi
