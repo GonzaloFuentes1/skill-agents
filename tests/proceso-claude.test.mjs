@@ -41,6 +41,7 @@ function arrancar(guion, extra = {}) {
 test('argumentos: stream-json, permisos por host, modo y resume', () => {
   const a = argumentos({ modo: 'auto' });
   for (const x of ['-p', '--input-format', 'stream-json', '--output-format', '--verbose', '--include-partial-messages', '--permission-prompts', 'host']) assert.ok(a.includes(x), x);
+  assert.equal(a[a.indexOf('--permission-prompt-tool') + 1], 'stdio');
   assert.equal(a[a.indexOf('--permission-mode') + 1], 'auto');
   assert.equal(argumentos({ modo: 'preguntar' })[argumentos({ modo: 'preguntar' }).indexOf('--permission-mode') + 1], 'manual');
   assert.ok(!a.includes('--resume'));

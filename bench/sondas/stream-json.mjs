@@ -14,7 +14,7 @@ import { resumirStreamJson } from './resumen-stream.mjs';
 const RESULTADOS = fileURLToPath(new URL('../resultados/', import.meta.url));
 const dir = mkdtempSync(join(tmpdir(), 'orq-sonda-stream-'));
 const args = ['-p', '--model', 'haiku', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
-  '--include-partial-messages', '--permission-prompts', 'host', '--permission-mode', 'manual'];
+  '--include-partial-messages', '--permission-prompts', 'host', '--permission-prompt-tool', 'stdio', '--permission-mode', 'manual'];
 const env = { ...process.env };
 delete env.CLAUDECODE; // si se corre con "!" desde Claude Code, que el hijo no se crea anidado
 const hijo = spawn(process.env.CLAUDE_BIN || 'claude', args, { cwd: dir, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });

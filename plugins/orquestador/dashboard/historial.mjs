@@ -6,6 +6,7 @@ import { bloquesDe, resultadosDe } from './bloques.mjs';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const ESCONDIDO = /^\s*<(command-|local-command|system-reminder)/;
+const INTERRUMPIDO = /^\[Request interrupted by user/;
 const mismoBloque = (a, b) => a.tipo === b.tipo && (a.tipo === 'herramienta' ? a.usoId === b.usoId : a.texto === b.texto);
 
 export const dirProyectos = (env = process.env) => join(env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects');
@@ -53,7 +54,7 @@ export function mensajesDesdeTranscript(texto) {
         const h = herramientas.get(r.usoId);
         if (h) h.resultado = { ok: r.ok, texto: r.texto };
       }
-      const bloques = bloquesDe(c).filter((b) => b.tipo === 'texto' && !ESCONDIDO.test(b.texto));
+      const bloques = bloquesDe(c).filter((b) => b.tipo === 'texto' && !ESCONDIDO.test(b.texto) && !INTERRUMPIDO.test(b.texto));
       if (bloques.length) mensajes.push({ rol: 'usuario', id: e.uuid ?? `u${mensajes.length}`, bloques });
     } else if (e.type === 'assistant') {
       const id = e.message?.id ?? e.uuid ?? `a${mensajes.length}`;

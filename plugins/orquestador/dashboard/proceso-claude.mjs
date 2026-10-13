@@ -21,7 +21,7 @@ export function resolverBinario(config = {}, env = process.env, plataforma = pro
 
 export function argumentos({ sessionId = null, modo = 'preguntar' } = {}) {
   const a = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
-    '--include-partial-messages', '--permission-prompts', 'host', '--permission-mode', MODOS[modo] ?? MODOS.preguntar];
+    '--include-partial-messages', '--permission-prompts', 'host', '--permission-prompt-tool', 'stdio', '--permission-mode', MODOS[modo] ?? MODOS.preguntar];
   if (sessionId) a.push('--resume', sessionId);
   return a;
 }

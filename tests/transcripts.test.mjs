@@ -25,6 +25,17 @@ test('mensajesDesdeTranscript: usuario, asistente fusionado por id, resultado ad
   assert.deepEqual(m[1].bloques[1], { tipo: 'herramienta', usoId: 'tu1', nombre: 'Bash', entrada: { command: 'ls' }, resultado: { ok: true, texto: 'a.txt' } });
 });
 
+test('mensajesDesdeTranscript oculta el aviso de interrupción que Claude Code guarda como mensaje de usuario', () => {
+  const texto = [
+    L({ type: 'user', uuid: 'u1', message: { role: 'user', content: 'Haz algo' } }),
+    L({ type: 'user', uuid: 'ui1', message: { role: 'user', content: '[Request interrupted by user]' } }),
+    L({ type: 'user', uuid: 'ui2', message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }),
+    L({ type: 'user', uuid: 'u2', message: { role: 'user', content: 'Otra pregunta' } }),
+  ].join('\n');
+  const m = mensajesDesdeTranscript(texto);
+  assert.deepEqual(m.map((x) => x.id), ['u1', 'u2']);
+});
+
 test('buscarTranscript usa CLAUDE_CONFIG_DIR, valida el id y historialDe avisa si no existe', () => {
   const conf = mkdtempSync(join(tmpdir(), 'orq-cfg-'));
   mkdirSync(join(conf, 'projects', 'C--x'), { recursive: true });
