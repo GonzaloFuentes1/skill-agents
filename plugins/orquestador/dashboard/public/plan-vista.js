@@ -14,7 +14,9 @@ export function validarPlan(p) {
     if (!/^E\d{1,2}$/.test(e?.id ?? '') || ids.has(e.id)) return { ok: false, error: `${donde}: id inválido o repetido` };
     ids.add(e.id);
     if (!esTexto(e.titulo, 80) || !esTexto(e.meta)) return { ok: false, error: `${donde}: falta título o meta` };
-    if (!Array.isArray(e.agentes) || !e.agentes.length) return { ok: false, error: `${donde}: sin agentes` };
+    // Una etapa sin agentes (o sin el campo) la hace el propio orquestador, p. ej. consolidar resultados.
+    if (e.agentes == null) e.agentes = [];
+    if (!Array.isArray(e.agentes) || e.agentes.length > 20) return { ok: false, error: `${donde}: agentes inválidos` };
     for (const a of e.agentes) if (!esTexto(a?.tipo, 80) || familiaModelo(a?.modelo) === 'desconocido') return { ok: false, error: `${donde}: agente inválido` };
     if (e.barrera != null && (!['auto', 'humana'].includes(e.barrera?.tipo) || !esTexto(e.barrera?.criterio))) return { ok: false, error: `${donde}: barrera inválida` };
   }
@@ -30,7 +32,7 @@ export function segmentar(texto) {
     if (m.index > ultimo) out.push({ tipo: 'texto', texto: t.slice(ultimo, m.index) });
     let r;
     try { r = validarPlan(JSON.parse(m[1])); } catch { r = { ok: false, error: 'JSON inválido' }; }
-    out.push(r.ok ? { tipo: 'plan', plan: r.plan } : { tipo: 'texto', texto: m[0], aviso: `Plan no válido: ${r.error}` });
+    out.push(r.ok ? { tipo: 'plan', plan: r.plan } : { tipo: 'texto', texto: m[0], aviso: `Plan no válido: ${r.error}`, json: m[1].trim() });
     ultimo = m.index + m[0].length;
   }
   if (ultimo < t.length) out.push({ tipo: 'texto', texto: t.slice(ultimo) });
@@ -48,7 +50,27 @@ export function estadoEtapas(plan, nodos = []) {
     else if (suyas.length) estados[e.id] = 'lista';
     else estados[e.id] = 'en-cola';
   }
+  // Etapa del orquestador (sin agentes): lista cuando terminó la anterior con agentes o ya empezó una posterior.
+  // Solo cuenta evidencia de agentes reales, para no encadenar varias etapas del orquestador.
+  const reales = { ...estados };
+  plan.etapas.forEach((e, i) => {
+    if (e.agentes.length) return;
+    const anterior = plan.etapas[i - 1];
+    const posteriorEmpezo = plan.etapas.slice(i + 1).some((x) => x.agentes.length && reales[x.id] !== 'en-cola');
+    if (posteriorEmpezo || (anterior?.agentes.length && reales[anterior.id] === 'lista')) estados[e.id] = 'lista';
+  });
   return estados;
+}
+
+// Agentes iguales (tipo, modelo y esfuerzo) en una sola fila con su cantidad, en orden de aparición.
+export function agruparAgentes(agentes = []) {
+  const grupos = new Map();
+  for (const a of agentes) {
+    const k = [a.tipo, a.modelo, a.esfuerzo ?? ''].join('|');
+    if (grupos.has(k)) grupos.get(k).cantidad++;
+    else grupos.set(k, { ...a, cantidad: 1 });
+  }
+  return [...grupos.values()];
 }
 
 const APROBACION = 'Apruebo el plan.';
@@ -78,7 +100,9 @@ export function barreraHumana(chat, nodos = []) {
   for (const [i, e] of plan.etapas.entries()) {
     if (e.barrera?.tipo !== 'humana') continue;
     const siguiente = plan.etapas[i + 1];
-    if (estados[e.id] === 'trabajando' || (estados[e.id] === 'lista' && (!siguiente || estados[siguiente.id] === 'en-cola'))) {
+    // Si la primera etapa es del orquestador, tras la aprobación ya la hizo él mismo en este turno.
+    const estado = !e.agentes.length && i === 0 ? 'lista' : estados[e.id];
+    if (estado === 'trabajando' || (estado === 'lista' && (!siguiente || estados[siguiente.id] === 'en-cola'))) {
       return { etapa: e.id, titulo: e.titulo, criterio: e.barrera.criterio };
     }
   }

@@ -78,6 +78,14 @@ function bloqueTexto(texto, ctx) {
   for (const s of segmentar(texto)) {
     if (s.tipo === 'plan') frag.append(renderPlan(s.plan, estadoEtapas(s.plan, ctx.nodos), { ...ctx.planAcciones, pendiente: ctx.planPendiente }));
     else {
+      if (s.json != null) {
+        // Plan que no pasó la validación: el aviso y el JSON plegado, en vez de un bloque crudo enorme.
+        frag.append(el('div', 'aviso', s.aviso));
+        const det = el('details', 'plan-invalido');
+        det.append(el('summary', null, 'Ver el JSON del plan'), el('pre', 'bloque-codigo', s.json));
+        frag.append(det);
+        continue;
+      }
       const d = divMarkdown(s.texto);
       if (d) frag.append(d);
       if (s.aviso) frag.append(el('div', 'aviso', s.aviso));

@@ -1,5 +1,6 @@
 // Tarjeta del plan en pipeline: etapas con sus agentes, barreras, obstáculos previstos y acciones.
 import { el, boton, chipModelo, nombreAgente } from './dom.js';
+import { agruparAgentes } from './plan-vista.js';
 
 const TEXTO_ESTADO = { 'en-cola': 'En cola', trabajando: 'Trabajando', lista: 'Lista', fallida: 'Falló' };
 
@@ -22,9 +23,17 @@ export function renderPlan(plan, estados, { pendiente = false, onAprobar, onCamb
     const titulo = el('div', 'etapa-titulo');
     titulo.append(el('span', 'mono tenue', e.id), el('span', 'versalita', e.titulo));
     etapa.append(titulo, el('div', 'tenue', e.meta));
-    for (const a of e.agentes) {
+    for (const a of agruparAgentes(e.agentes)) {
       const ag = el('div', 'etapa-agente');
-      ag.append(el('span', 'nombre', nombreAgente(a.tipo)), chipModelo(a.modelo, a.esfuerzo));
+      const nombre = el('span', 'nombre');
+      if (a.cantidad > 1) nombre.append(el('span', 'cantidad', `${a.cantidad} × `));
+      nombre.append(document.createTextNode(nombreAgente(a.tipo)));
+      ag.append(nombre, chipModelo(a.modelo, a.esfuerzo));
+      etapa.append(ag);
+    }
+    if (!e.agentes.length) {
+      const ag = el('div', 'etapa-agente etapa-orquestador');
+      ag.append(el('span', 'punto-orq'), el('span', 'nombre', 'Orquestador'));
       etapa.append(ag);
     }
     etapa.append(el('span', 'etapa-estado', TEXTO_ESTADO[estado]));
@@ -32,7 +41,9 @@ export function renderPlan(plan, estados, { pendiente = false, onAprobar, onCamb
     if (e.barrera) {
       const b = el('div', `barrera b-${e.barrera.tipo}`);
       b.setAttribute('title', e.barrera.criterio);
-      b.append(el('span', 'rombo', e.barrera.tipo === 'humana' ? '!' : '✓'));
+      const rombo = el('span', 'rombo');
+      rombo.append(el('span', 'rombo-signo', e.barrera.tipo === 'humana' ? '!' : '✓'));
+      b.append(rombo);
       tuberia.append(b);
     }
   }
