@@ -153,3 +153,45 @@ test('restablecer: sin {confirmar:true} da 400 y no hace nada; con confirmación
   assert.deepEqual(invocaciones().map((i) => i.argv), [['auto-mode', 'reset', '-y'], ['auto-mode', 'defaults']]);
   assert.deepEqual(e.personalizadas.permitir, []);
 });
+
+const base = () => JSON.stringify({
+  autoMode: {
+    allow: ['$defaults', 'mi regla'], soft_deny: ['$defaults', 'pare X'],
+    environment: ['$defaults', 'Source control: github.com/a/*', 'Organization: CENIA', 'otra'],
+  },
+});
+
+test('campos ausentes conservan el valor actual; solo los presentes reemplazan', () => {
+  const a = entorno(base());
+  escribirAutoModo({ defaultModeTerminal: true }, a.env);
+  assert.deepEqual(a.leer().autoMode, JSON.parse(base()).autoMode);
+  const b = entorno(base());
+  escribirAutoModo({ permitir: [] }, b.env);
+  const sb = b.leer().autoMode;
+  assert.deepEqual(sb.allow, ['$defaults']);
+  assert.deepEqual(sb.soft_deny, ['$defaults', 'pare X']);
+  assert.deepEqual(sb.environment, JSON.parse(base()).autoMode.environment);
+  const c = entorno(base());
+  escribirAutoModo({ entorno: { repos: ['x'] } }, c.env);
+  assert.deepEqual(c.leer().autoMode.environment, ['$defaults', 'Source control: x', 'Organization: CENIA', 'otra']);
+});
+
+test('respaldo original: .orig.bak conserva el contenido previo al primer guardado', () => {
+  const original = base();
+  const { env } = entorno(original);
+  escribirAutoModo({ permitir: ['uno'] }, env);
+  escribirAutoModo({ permitir: ['dos'] }, env);
+  const ruta = rutaSettingsUsuario(env);
+  assert.equal(readFileSync(`${ruta}.orquestador.orig.bak`, 'utf8'), original);
+  assert.deepEqual(JSON.parse(readFileSync(ruta + SUFIJO_RESPALDO, 'utf8')).autoMode.allow, ['$defaults', 'uno']);
+});
+
+test('permissions o autoMode que no son objetos: 409 sin escribir', async () => {
+  for (const s of [{ permissions: [] }, { autoMode: 'x' }]) {
+    const texto = JSON.stringify(s);
+    const { env } = entorno(texto);
+    await rechaza(() => escribirAutoModo({ permitir: ['x'] }, env), 409);
+    assert.equal(readFileSync(rutaSettingsUsuario(env), 'utf8'), texto);
+    assert.equal(existsSync(rutaSettingsUsuario(env) + SUFIJO_RESPALDO), false);
+  }
+});
