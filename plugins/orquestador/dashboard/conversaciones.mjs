@@ -103,6 +103,7 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
         return;
       case 'fin-turno': {
         const interrumpido = interrumpidas.delete(c.id);
+        pendientes.get(c.id)?.clear();
         if (e.sessionId) c.sessionId = e.sessionId;
         const ok = e.ok || interrumpido;
         c.estado = ok ? 'lista' : 'error';
@@ -154,6 +155,7 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
       const max = cargarConfig(env).conversacionesMax;
       if (!EN_CURSO.has(c.estado) && enCurso() >= max) throw new ErrorConversacion(409, `Hay ${enCurso()} conversaciones trabajando; espera o detén una`);
       const p = asegurarProceso(c);
+      interrumpidas.delete(c.id);
       if (c.titulo === TITULO_NUEVO) c.titulo = t.length > 60 ? `${t.slice(0, 59)}…` : t;
       c.estado = 'trabajando';
       c.error = null;
@@ -201,7 +203,7 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
     interrumpir(id) {
       const c = buscar(id);
       const p = procesos.get(c.id);
-      if (p) { interrumpidas.add(c.id); p.interrumpir(); }
+      if (p) { if (EN_CURSO.has(c.estado)) interrumpidas.add(c.id); p.interrumpir(); }
     },
 
     cerrar(id) {

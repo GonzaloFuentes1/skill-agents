@@ -169,3 +169,35 @@ test('cambiarModo y renombrar validan y persisten', () => {
   assert.equal(g.obtener(c.id).etiqueta, '[CI]');
   lanza(() => g.renombrar(c.id, ''), 400);
 });
+
+test('interrumpir sin turno en curso no deja marca: un error posterior sigue siendo error', async () => {
+  const finError = { emitir: { type: 'result', subtype: 'error_during_execution', is_error: true, session_id: 'ses-1', result: 'Falló de verdad' } };
+  const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, ...texto('m1', 'a'), fin(), ESPERAR_USUARIO, finError]);
+  const g = crearGestor({ env, spawnFn });
+  const { eventos, hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'uno');
+  await hasta((e) => e.tipo === 'chat:fin-turno');
+  assert.equal(g.obtener(c.id).estado, 'lista');
+  g.interrumpir(c.id); // sin turno en curso
+  g.enviar(c.id, 'dos');
+  await hasta(() => eventos.filter((x) => x.tipo === 'chat:fin-turno').length === 2);
+  const conv = g.obtener(c.id);
+  assert.equal(conv.estado, 'error');
+  assert.match(conv.error, /Falló de verdad/);
+  await g.apagar();
+});
+
+test('interrumpir con permiso pendiente: al terminar el turno no quedan pendientes y responder da 404', async () => {
+  const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, permiso('r1', 'ls'), ESPERAR_PEDIDO, finInterrumpido]);
+  const g = crearGestor({ env, spawnFn });
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'x');
+  await hasta((e) => e.tipo === 'chat:permiso');
+  g.interrumpir(c.id);
+  await hasta((e) => e.tipo === 'chat:fin-turno');
+  assert.deepEqual(g.pendientesDe(c.id), []);
+  lanza(() => g.responderPermiso(c.id, 'r1', 'permitir'), 404);
+  await g.apagar();
+});
