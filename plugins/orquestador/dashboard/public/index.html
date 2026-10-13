@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orquestador en vivo</title>
+<style>
+  :root {
+    --fondo: #0d1017; --fondo-2: #121722; --panel: #161b27; --panel-2: #1c2231; --borde: #273047;
+    --texto: #e8ebf2; --suave: #98a2b8; --tenue: #5f6a82;
+    --acento: #7c6cf0; --ok: #2bb39a; --error: #ef5b5b; --aviso: #e0b03a;
+    --sombra: 0 10px 30px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --fondo: #f4f6fb; --fondo-2: #eaeef6; --panel: #ffffff; --panel-2: #f6f8fc; --borde: #dfe4ee;
+      --texto: #171c28; --suave: #56607a; --tenue: #99a2b5;
+      --sombra: 0 10px 30px rgba(30, 40, 70, .12);
+      color-scheme: light;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--fondo); color: var(--texto);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  button, select, input { font: inherit; color: inherit; }
+
+  /* Barra superior */
+  .barra {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 10px 16px; border-bottom: 1px solid var(--borde); background: var(--panel);
+  }
+  .marca { display: flex; align-items: baseline; gap: 8px; font-weight: 650; font-size: 16px; }
+  .marca .sub { color: var(--suave); font-weight: 450; font-size: 13px; }
+  .controles { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--suave); font-size: 13px; }
+  .controles select { background: var(--panel-2); border: 1px solid var(--borde); border-radius: 8px; padding: 4px 8px; max-width: min(260px, 70vw); }
+  .conexion { display: inline-flex; align-items: center; gap: 6px; }
+  .conexion::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--tenue); }
+  .conexion.ok::before { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .conexion.error::before { background: var(--error); }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 1fr 340px; height: calc(100vh - 53px); min-height: 520px; }
+  .escenario {
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--acento) 10%, transparent) 0, transparent 45%),
+      radial-gradient(circle at 50% 50%, var(--fondo-2) 0, var(--fondo) 75%);
+  }
+  .panel { border-left: 1px solid var(--borde); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: minmax(0, 1fr); height: auto; }
+    .escenario { height: 70vh; min-height: 460px; }
+    .panel { border-left: 0; border-top: 1px solid var(--borde); }
+  }
+
+  /* Líneas */
+  .lineas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .lineas line { vector-effect: non-scaling-stroke; stroke-width: 2; }
+  .lineas line.activa { stroke-dasharray: 6 8; animation: fluir 0.9s linear infinite; opacity: .9; }
+  .lineas line.quieta { opacity: .18; }
+  @keyframes fluir { to { stroke-dashoffset: -14; } }
+
+  /* Orquestador al centro */
+  .centro {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 150px; height: 150px; border-radius: 50%; display: grid; place-items: center; z-index: 3;
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--acento) 40%, var(--panel)), var(--panel) 70%);
+    border: 2px solid color-mix(in srgb, var(--acento) 70%, transparent); box-shadow: var(--sombra);
+    text-align: center;
+  }
+  .centro-anillo { position: absolute; inset: -10px; border-radius: 50%; border: 2px solid transparent; }
+  .trabajando .centro-anillo { border-color: color-mix(in srgb, var(--acento) 55%, transparent); animation: latir 1.6s ease-out infinite; }
+  .centro.bloqueo .centro-anillo { border-color: var(--error); animation: destello .5s ease-out 3; }
+  @keyframes latir { from { transform: scale(1); opacity: .9; } to { transform: scale(1.35); opacity: 0; } }
+  @keyframes destello { from { transform: scale(1); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
+  .centro-icono { line-height: 0; color: var(--acento); }
+  .icono-centro { width: 34px; height: 34px; }
+  .icono-marca { width: 18px; height: 18px; color: var(--acento); align-self: center; }
+  .centro-titulo { font-weight: 650; margin-top: 4px; }
+
+  /* Chips */
+  .chip {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; white-space: nowrap;
+    background: color-mix(in srgb, var(--c, var(--acento)) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c, var(--acento)) 45%, transparent);
+  }
+
+  /* Nodos de subagentes */
+  .nodo {
+    position: absolute; transform: translate(-50%, -50%); width: 172px; z-index: 2;
+    background: var(--panel); border: 1px solid var(--borde); border-left: 4px solid var(--c);
+    border-radius: 12px; padding: 8px 10px; box-shadow: var(--sombra);
+    transition: left .5s ease, top .5s ease, opacity .4s ease;
+  }
+  .nodo.oculto { opacity: 0; }
+  .nodo.nuevo { animation: aparecer .35s cubic-bezier(.2, .9, .3, 1.3); }
+  @keyframes aparecer { from { transform: translate(-50%, -50%) scale(.6); opacity: 0; } }
+  .nodo.activo { animation: pulso 1.8s ease-in-out infinite; }
+  .nodo.activo.nuevo { animation: aparecer .35s cubic-bezier(.2, .9, .3, 1.3), pulso 1.8s ease-in-out .35s infinite; }
+  /* Terminados: fichas compactas en el anillo de historial. */
+  .nodo.compacto { width: 140px; padding: 5px 8px; border-radius: 10px; }
+  .nodo.compacto .meta, .nodo.compacto .pie { display: none; }
+  .nodo.compacto .avatar { width: 20px; height: 20px; font-size: 9px; }
+  .nodo.compacto .nombre { font-size: 12px; }
+  .nodo .resumen { margin-left: auto; font-size: 11px; color: var(--suave); white-space: nowrap; }
+  @keyframes pulso {
+    0%, 100% { box-shadow: var(--sombra), 0 0 0 0 color-mix(in srgb, var(--c) 0%, transparent); }
+    50% { box-shadow: var(--sombra), 0 0 0 6px color-mix(in srgb, var(--c) 28%, transparent); }
+  }
+  .nodo.terminado, .nodo.fallido { opacity: .55; }
+  .nodo.fallido { border-style: dashed; }
+  .nodo.alerta { border-color: var(--error); border-left-color: var(--error); }
+  .nodo .cabeza { display: flex; align-items: center; gap: 8px; }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; flex: none;
+    background: var(--c); color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  }
+  .nodo .nombre { font-weight: 650; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nodo .meta {
+    margin-top: 6px; font-size: 12px; color: var(--suave);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .nodo .pie { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--suave); }
+  .badge { position: absolute; top: -9px; right: -9px; background: var(--error); color: #fff; border-radius: 999px; padding: 0 6px; font-size: 12px; }
+
+  /* Tarjetas que viajan */
+  .tarjeta {
+    position: absolute; z-index: 5; width: 250px; pointer-events: none;
+    transform: translate(-50%, -50%) scale(.7); opacity: 0;
+    background: var(--panel); border: 1px solid var(--borde); border-left: 5px solid var(--c);
+    border-radius: 12px; padding: 10px 12px; box-shadow: var(--sombra);
+    transition: left .9s cubic-bezier(.2, .8, .2, 1), top .9s cubic-bezier(.2, .8, .2, 1), transform .9s ease, opacity .3s ease;
+  }
+  .tarjeta.en-viaje { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .tarjeta.se-va { opacity: 0; transform: translate(-50%, -50%) scale(.85); transition: opacity .4s ease, transform .4s ease; }
+  .tarjeta .rotulo { font-size: 11px; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+  .tarjeta .titulo { font-weight: 650; margin: 2px 0 4px; }
+  .tarjeta .persona { font-style: italic; font-size: 12px; color: var(--suave); margin-bottom: 6px; }
+  .tarjeta .fila { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tarjeta.recibo { width: 230px; border-left-color: var(--ok); }
+  .tarjeta.recibo.con-alerta { border-left-color: var(--error); }
+
+  .vacio {
+    position: absolute; left: 50%; top: calc(50% + 110px); transform: translateX(-50%);
+    color: var(--suave); text-align: center; z-index: 1;
+  }
+  .vacio button, .boton {
+    margin-top: 8px; background: var(--acento); color: #fff; border: 0; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+  }
+
+  /* Panel lateral */
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--borde); border-radius: 10px; padding: 8px; }
+  .stat .valor { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .nombre { font-size: 11px; color: var(--suave); }
+  .stat.alerta .valor { color: var(--error); }
+  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); margin: 4px 12px 6px; }
+  .timeline { list-style: none; margin: 0; padding: 0 12px 12px; overflow: auto; flex: 1; }
+  .timeline li { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--borde); font-size: 12px; }
+  .timeline .icono { grid-row: span 2; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: var(--panel-2); }
+  .timeline .linea1 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .timeline .hora { color: var(--tenue); font-variant-numeric: tabular-nums; }
+  .timeline .texto { color: var(--suave); overflow-wrap: anywhere; }
+  .timeline .t-alerta .icono, .timeline .t-bloqueo .icono { background: color-mix(in srgb, var(--error) 22%, transparent); }
+  .timeline .t-fin .icono { background: color-mix(in srgb, var(--ok) 22%, transparent); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 20px); opacity: 0; z-index: 10;
+    max-width: min(560px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--error);
+    border-left: 5px solid var(--error); border-radius: 10px; padding: 10px 14px; box-shadow: var(--sombra);
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+
+  /* Pantallas angostas: va al final para ganar a las reglas base de nodos, centro y tarjetas. */
+  @media (max-width: 860px) {
+    .nodo { width: 138px; padding: 6px 8px; }
+    .nodo.compacto { width: 116px; }
+    .nodo .meta { font-size: 11px; }
+    .centro { width: 112px; height: 112px; }
+    .tarjeta { width: 200px; }
+  }
+  body.sin-animacion *, body.sin-animacion *::before, body.sin-animacion *::after { animation: none !important; transition: none !important; }
+</style>
+</head>
+<body>
+<header class="barra">
+  <div class="marca"><svg class="icono-marca" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v18M12 3v18M19 3v18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="5" cy="9" r="2.7" fill="currentColor"/><circle cx="12" cy="15" r="2.7" fill="currentColor"/><circle cx="19" cy="7" r="2.7" fill="currentColor"/></svg> Orquestador <span class="sub">en vivo</span></div>
+  <div class="controles">
+    <label>Sesión <select id="sesion" aria-label="Sesión"></select></label>
+    <label><input type="checkbox" id="seguir" checked> Seguir la más reciente</label>
+    <label><input type="checkbox" id="animaciones"> Animaciones</label>
+    <span id="conexion" class="conexion">conectando…</span>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="escenario" id="escenario" aria-label="Orquestador y subagentes">
+    <svg id="lineas" class="lineas" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+    <div id="nodos"></div>
+    <div id="centro" class="centro">
+      <div class="centro-anillo"></div>
+      <div>
+        <div class="centro-icono"><svg class="icono-centro" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v18M12 3v18M19 3v18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="5" cy="9" r="2.7" fill="currentColor"/><circle cx="12" cy="15" r="2.7" fill="currentColor"/><circle cx="19" cy="7" r="2.7" fill="currentColor"/></svg></div>
+        <div class="centro-titulo">Orquestador</div>
+        <span id="centro-modelo" class="chip">—</span>
+      </div>
+    </div>
+    <div id="tarjetas" aria-live="polite"></div>
+    <div id="vacio" class="vacio">
+      <div>Esperando delegaciones…</div>
+      <button id="demo" type="button">Ver demo</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div id="stats" class="stats"></div>
+    <h2>Actividad</h2>
+    <ol id="timeline" class="timeline"></ol>
+  </aside>
+</main>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script type="module">
+import { vistaVacia, reducir, posicionOrbital, disposicion, conciliarConServidor, familia, formatoCosto, formatoDuracion, formatoTokens } from './estado-vista.js';
+
+const $ = (id) => document.getElementById(id);
+const escenario = $('escenario');
+const svg = $('lineas');
+const NS = svg.namespaceURI;
+// Animaciones: por defecto según prefers-reduced-motion; el usuario puede cambiarlo (se recuerda) o forzarlo con ?animar=1.
+const preferencia = (() => { try { return localStorage.getItem('orq-animaciones'); } catch { return null; } })();
+let animado = new URLSearchParams(location.search).has('animar') ? true
+  : preferencia != null ? preferencia === '1' : !matchMedia('(prefers-reduced-motion: reduce)').matches;
+const VIAJE_MS = 900, LECTURA_MS = 1400, SALIDA_MS = 400;
+
+let vista = vistaVacia();
+let actual = null;
+let enReplay = true;
+let servidor = null;            // { estado, config } de /estado
+const ocultos = new Set();      // nodos cuya tarjeta todavía viaja
+
+// ---------- utilidades de DOM (solo textContent / setAttribute) ----------
+function el(tag, clase, texto) {
+  const e = document.createElement(tag);
+  if (clase) e.className = clase;
+  if (texto != null) e.textContent = texto;
+  return e;
+}
+const chip = (texto, color) => { const c = el('span', 'chip', texto); if (color) c.style.setProperty('--c', color); return c; };
+const iniciales = (nombre) => nombre.split(/[-_\s]+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('') || '?';
+const hora = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-CL', { hour12: false }) : '');
+const base = (ruta) => String(ruta ?? '').split(/[\\/]/).filter(Boolean).pop() ?? '';
+const sesion = () => (actual ? vista.sesiones[actual] : null);
+
+function estadoConexion(texto, clase) {
+  const c = $('conexion');
+  c.textContent = texto;
+  c.className = `conexion ${clase ?? ''}`;
+}
+
+function toast(texto) {
+  const t = $('toast');
+  t.textContent = texto;
+  t.classList.add('visible');
+  clearTimeout(toast.temporizador);
+  toast.temporizador = setTimeout(() => t.classList.remove('visible'), 4500);
+}
+
+// ---------- render ----------
+function crearNodo(n) {
+  const nodo = el('div', 'nodo');
+  nodo.dataset.id = n.id;
+  const cabeza = el('div', 'cabeza');
+  cabeza.append(el('div', 'avatar', iniciales(n.agente)), el('div', 'nombre', n.agente));
+  const pie = el('div', 'pie');
+  nodo.append(cabeza, el('div', 'meta'), pie);
+  return nodo;
+}
+
+function actualizarNodo(nodo, n, p) {
+  nodo.style.left = `${p.x * 100}%`;
+  nodo.style.top = `${p.y * 100}%`;
+  nodo.style.setProperty('--c', n.color);
+  nodo.classList.toggle('compacto', p.compacto);
+  nodo.classList.toggle('activo', n.estado === 'activo');
+  nodo.classList.toggle('terminado', n.estado === 'terminado' || n.estado === 'sin-cierre');
+  nodo.classList.toggle('fallido', n.estado === 'fallido');
+  let resumen = nodo.querySelector('.resumen');
+  if (p.compacto) {
+    if (!resumen) { resumen = el('span', 'resumen'); nodo.querySelector('.cabeza').append(resumen); }
+    resumen.textContent = n.estado === 'sin-cierre' ? '?' : n.estado === 'fallido' ? '✕' : '✓';
+  } else if (resumen) resumen.remove();
+  nodo.classList.toggle('alerta', !!n.alerta);
+  nodo.classList.toggle('oculto', ocultos.has(n.id));
+  nodo.querySelector('.meta').textContent = n.meta || 'Sin meta';
+  const pie = nodo.querySelector('.pie');
+  pie.replaceChildren(chip(`${familia(n.modelo)}·${n.esfuerzo}`, n.color));
+  if (n.resultado) pie.append(el('span', null, `${formatoCosto(n.resultado.costoUSD)} · ${formatoDuracion(n.resultado.duracionMs)}`));
+  else if (n.estado === 'activo') pie.append(el('span', null, 'trabajando…'));
+  else if (n.estado === 'sin-cierre') pie.append(el('span', null, 'sin cierre'));
+  const tooltip = [
+    n.meta, `${familia(n.modelo)}·${n.esfuerzo}${n.resultado?.modeloReal ? ` → ${n.resultado.modeloReal}` : ''}`,
+    n.resultado && `${formatoCosto(n.resultado.costoUSD)} · ${formatoDuracion(n.resultado.duracionMs)}`,
+    n.persona && `Persona: ${n.persona}`, n.origen && `Modelo: ${n.origen}`, n.alerta && `⚠ ${n.alerta}`,
+  ].filter(Boolean).join('\n');
+  if (tooltip) nodo.setAttribute('title', tooltip); else nodo.removeAttribute('title');
+  let badge = nodo.querySelector('.badge');
+  if (n.alerta && !badge) nodo.append(el('span', 'badge', '⚠'));
+  if (!n.alerta && badge) badge.remove();
+}
+
+function renderNodos(s) {
+  const posiciones = s ? disposicion(s) : [];
+  const vivos = new Set(posiciones.map((p) => p.id));
+  for (const nodo of [...$('nodos').children]) if (!vivos.has(nodo.dataset.id)) nodo.remove();
+  for (const linea of [...svg.querySelectorAll('line')]) if (!vivos.has(linea.dataset.id)) linea.remove();
+  for (const p of posiciones) {
+    const id = p.id;
+    const n = s.nodos[id];
+    let nodo = $('nodos').querySelector(`[data-id="${CSS.escape(id)}"]`);
+    if (!nodo) { nodo = crearNodo(n); $('nodos').append(nodo); }
+    actualizarNodo(nodo, n, p);
+    let linea = svg.querySelector(`line[data-id="${CSS.escape(id)}"]`);
+    if (!linea) { linea = document.createElementNS(NS, 'line'); linea.dataset.id = id; svg.append(linea); }
+    linea.setAttribute('x1', '50'); linea.setAttribute('y1', '50');
+    linea.setAttribute('x2', String(p.x * 100)); linea.setAttribute('y2', String(p.y * 100));
+    linea.setAttribute('stroke', n.alerta ? 'var(--error)' : n.color);
+    linea.setAttribute('class', n.estado === 'activo' && !ocultos.has(id) ? 'activa' : 'quieta');
+  }
+  escenario.classList.toggle('trabajando', !!s && s.stats.activos > 0);
+  $('vacio').hidden = !!(s && s.ordenNodos.length);
+}
+
+function renderStats(s) {
+  const st = s?.stats ?? { activos: 0, completados: 0, costoUSD: 0, alertas: 0, bloqueos: 0, fable: 0 };
+  const fableUsados = servidor?.estado?.fableUsados ?? st.fable;
+  const fableTope = servidor?.config?.fableMaxPorSesion ?? '?';
+  const tarjetas = [
+    ['Activos', st.activos], ['Completados', st.completados], ['Fable', `${fableUsados}/${fableTope}`],
+    // El estado del servidor suma toda la sesión; la vista local solo ve los últimos eventos del historial.
+    ['Costo', formatoCosto(Math.max(st.costoUSD, servidor?.estado?.costoUSD ?? 0))], ['Alertas', st.alertas, st.alertas > 0], ['Bloqueos', st.bloqueos, st.bloqueos > 0],
+  ];
+  $('stats').replaceChildren(...tarjetas.map(([nombre, valor, mal]) => {
+    const c = el('div', `stat${mal ? ' alerta' : ''}`);
+    c.append(el('div', 'valor', String(valor)), el('div', 'nombre', nombre));
+    return c;
+  }));
+  $('centro-modelo').textContent = servidor?.estado?.modeloPrincipal ?? '—';
+}
+
+const ICONOS = { delegacion: '→', fin: '✓', alerta: '⚠', bloqueo: '⛔' };
+function renderTimeline(s) {
+  const items = (s?.timeline ?? []).filter((t) => ICONOS[t.tipo]);
+  $('timeline').replaceChildren(...items.map((t) => {
+    const li = el('li', `t-${t.tipo}`);
+    const icono = el('span', 'icono', t.tipo === 'fin' && t.ok === false ? '✕' : ICONOS[t.tipo]);
+    const linea1 = el('div', 'linea1');
+    linea1.append(el('span', 'hora', hora(t.ts)));
+    if (t.agente) linea1.append(el('b', null, t.agente));
+    if (t.modelo) linea1.append(chip(t.modelo));
+    if (t.regla) linea1.append(chip(t.regla, 'var(--error)'));
+    if (t.tipo === 'fin' && t.costoUSD) linea1.append(el('span', 'hora', formatoCosto(t.costoUSD)));
+    li.append(icono, linea1, el('div', 'texto', t.texto || ''));
+    return li;
+  }));
+}
+
+function renderSelector() {
+  const sel = $('sesion');
+  const ids = [...vista.orden].sort((a, b) => String(vista.sesiones[b].ultimo ?? '').localeCompare(String(vista.sesiones[a].ultimo ?? '')));
+  sel.replaceChildren(...ids.map((id) => {
+    const s = vista.sesiones[id];
+    const etiqueta = `${base(s.cwd) || id.slice(0, 8)} · ${hora(s.ultimo)} · ${s.ordenNodos.length} deleg.`;
+    const o = el('option', null, etiqueta);
+    o.value = id;
+    o.selected = id === actual;
+    return o;
+  }));
+}
+
+function render() {
+  const s = sesion();
+  renderNodos(s);
+  renderStats(s);
+  renderTimeline(s);
+  renderSelector();
+}
+
+// ---------- animaciones ----------
+function px(punto) {
+  const r = escenario.getBoundingClientRect();
+  return { x: punto.x * r.width, y: punto.y * r.height };
+}
+
+function viajar(tarjeta, desde, hasta, alLlegar) {
+  tarjeta.style.left = `${desde.x}px`;
+  tarjeta.style.top = `${desde.y}px`;
+  $('tarjetas').append(tarjeta);
+  tarjeta.getBoundingClientRect(); // fuerza el estado inicial antes de la transición
+  tarjeta.classList.add('en-viaje');
+  tarjeta.style.left = `${hasta.x}px`;
+  tarjeta.style.top = `${hasta.y}px`;
+  setTimeout(alLlegar, VIAJE_MS);
+  setTimeout(() => { tarjeta.classList.add('se-va'); setTimeout(() => tarjeta.remove(), SALIDA_MS); }, VIAJE_MS + LECTURA_MS);
+}
+
+function tarjetaEnvio(n) {
+  const t = el('div', 'tarjeta');
+  t.style.setProperty('--c', n.color);
+  t.append(el('div', 'rotulo', `Encargo → ${n.agente}`), el('div', 'titulo', n.meta || 'Sin meta'));
+  if (n.persona) t.append(el('div', 'persona', n.persona));
+  const fila = el('div', 'fila');
+  fila.append(chip(`${familia(n.modelo)}·${n.esfuerzo}`, n.color));
+  if (n.origen) fila.append(chip(n.origen));
+  t.append(fila);
+  return t;
+}
+
+function tarjetaRecibo(n) {
+  const r = n.resultado ?? {};
+  const t = el('div', `tarjeta recibo${n.alerta ? ' con-alerta' : ''}`);
+  t.append(el('div', 'rotulo', `${n.estado === 'fallido' ? '✕ Falló' : '✓ Listo'} ← ${n.agente}`));
+  t.append(el('div', 'titulo', r.modeloReal ?? 'modelo no informado'));
+  const fila = el('div', 'fila');
+  fila.append(chip(`${formatoTokens(r.tokensIn)} / ${formatoTokens(r.tokensOut)} tok`), chip(formatoCosto(r.costoUSD)), chip(formatoDuracion(r.duracionMs)));
+  t.append(fila);
+  return t;
+}
+
+function animar(efecto) {
+  const s = sesion();
+  if (!efecto || !s || efecto.sesion !== actual || !animado) { render(); return; }
+  const centro = { x: 0.5, y: 0.5 };
+  if (efecto.tipo === 'enviar') {
+    const n = s.nodos[efecto.id];
+    ocultos.add(n.id);
+    render();
+    viajar(tarjetaEnvio(n), px(centro), px(posicionOrbital(n.slot)), () => {
+      ocultos.delete(n.id);
+      render();
+      const nodo = $('nodos').querySelector(`[data-id="${CSS.escape(n.id)}"]`);
+      nodo?.classList.add('nuevo');
+      setTimeout(() => nodo?.classList.remove('nuevo'), 400);
+    });
+  } else if (efecto.tipo === 'volver') {
+    const n = s.nodos[efecto.id];
+    render();
+    viajar(tarjetaRecibo(n), px(posicionOrbital(n.slot)), px(centro), () => {});
+  } else if (efecto.tipo === 'bloqueo') {
+    render();
+    const c = $('centro');
+    c.classList.remove('bloqueo');
+    void c.offsetWidth;
+    c.classList.add('bloqueo');
+    toast(`⛔ ${efecto.motivo}`);
+  } else {
+    render();
+  }
+}
+
+// ---------- datos ----------
+function elegirMasReciente() {
+  let mejor = null;
+  for (const id of vista.orden) if (!mejor || String(vista.sesiones[id].ultimo ?? '') > String(vista.sesiones[mejor].ultimo ?? '')) mejor = id;
+  actual = mejor;
+}
+
+function procesar(e) {
+  const nueva = !!e?.session && !vista.sesiones[e.session];
+  const { efecto } = reducir(vista, e);
+  if (enReplay) return;
+  if (nueva && ($('seguir').checked || !actual)) { actual = e.session; servidor = null; pedirEstado(); render(); }
+  if (e?.session === actual) animar(efecto); else renderSelector();
+}
+
+async function pedirEstado() {
+  const id = actual;
+  if (!id || id.startsWith('demo-')) return;
+  try {
+    const r = await fetch(`/estado?session=${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    const datos = await r.json();
+    if (id !== actual) return; // el usuario cambió de sesión mientras se esperaba la respuesta
+    servidor = datos;
+    const s = sesion();
+    // Activos que el servidor ya no tiene (sesión que murió sin cerrar sus delegaciones) dejan de latir.
+    if (!enReplay && s && servidor.estado && conciliarConServidor(s, servidor.estado.activas ?? {}).length) render();
+    else renderStats(s);
+  } catch { /* sin servidor: se usan los datos locales */ }
+}
+
+function conectar() {
+  if (!('EventSource' in window) || location.protocol === 'file:') { estadoConexion('sin servidor', 'error'); enReplay = false; return; }
+  const fuente = new EventSource('/eventos');
+  fuente.addEventListener('open', () => {
+    // Cada conexión (también las reconexiones) reenvía el historial completo: se parte de cero.
+    vista = vistaVacia(); enReplay = true;
+    estadoConexion('en vivo', 'ok');
+  });
+  fuente.addEventListener('error', () => estadoConexion('reconectando…', 'error'));
+  fuente.addEventListener('evento', (m) => { try { procesar(JSON.parse(m.data)); } catch { /* evento inválido */ } });
+  fuente.addEventListener('replay-fin', () => {
+    enReplay = false;
+    if (!actual || !vista.sesiones[actual]) elegirMasReciente();
+    pedirEstado();
+    render();
+  });
+}
+
+// ---------- demo ----------
+function demo() {
+  enReplay = false;
+  const id = `demo-${Date.now()}`;
+  const ahora = () => new Date().toISOString();
+  const pasos = [
+    [0, { tipo: 'sesion', cwd: 'demo/paper-rl' }],
+    [400, { tipo: 'delegacion', id: 'd1', agente: 'orquestador:investigador-rl', meta: 'Diseñar ablation de reward shaping con 3 seeds', modelo: 'opus', esfuerzo: 'high', origenModelo: 'explicito', persona: 'Escéptico, obsesionado con seeds y baselines', color: 'purple' }],
+    [1300, { tipo: 'delegacion', id: 'd2', agente: 'orquestador:auditor-datos', meta: 'Perfilar resultados.csv y detectar outliers', modelo: 'haiku', esfuerzo: 'low', origenModelo: 'explicito', persona: 'Contador meticuloso de CSV y tablas', color: 'green' }],
+    [2200, { tipo: 'delegacion', id: 'd3', agente: 'orquestador:bibliografo', meta: 'Verificar las 14 citas BibTeX del related work', modelo: 'haiku', esfuerzo: 'low', origenModelo: 'frontmatter', persona: 'Ordenado; BibTeX correcto y verificado', color: 'cyan' }],
+    [4200, { tipo: 'fin', id: 'd2', modeloReal: 'claude-haiku-5-5', tokensIn: 18400, tokensOut: 920, costoUSD: 0.0023, duracionMs: 3800, ok: true }],
+    [5200, { tipo: 'bloqueo', agente: 'orquestador:revisor-par', regla: 'tope-fable', motivo: 'Tope de Fable alcanzado (2/2 en esta sesión). Usa opus con effort xhigh.' }],
+    [6400, { tipo: 'delegacion', id: 'd4', agente: 'orquestador:revisor-par', meta: 'Revisión crítica del método como Reviewer 2', modelo: 'opus', esfuerzo: 'xhigh', origenModelo: 'explicito', persona: '"Reviewer 2" exigente pero justo', color: 'orange' }],
+    [7600, { tipo: 'fin', id: 'd3', modeloReal: 'claude-haiku-5-5', tokensIn: 9100, tokensOut: 400, costoUSD: 0.0011, duracionMs: 5100, ok: true }],
+    [9000, { tipo: 'fin', id: 'd1', modeloReal: 'claude-sonnet-5-5', tokensIn: 41200, tokensOut: 2600, costoUSD: 0.108, duracionMs: 8400, ok: true }],
+    [9050, { tipo: 'alerta', id: 'd1', agente: 'orquestador:investigador-rl', mensaje: 'se pidió opus pero corrió claude-sonnet-5-5' }],
+    [11500, { tipo: 'fin', id: 'd4', modeloReal: 'claude-opus-5-5', tokensIn: 52300, tokensOut: 3100, costoUSD: 0.271, duracionMs: 5000, ok: true }],
+  ];
+  actual = id;
+  $('seguir').checked = false;
+  servidor = { estado: { fableUsados: 2, modeloPrincipal: 'opus' }, config: { fableMaxPorSesion: 2 } };
+  for (const [ms, e] of pasos) setTimeout(() => { procesar({ ...e, session: id, ts: ahora() }); if (e.tipo === 'sesion') render(); }, ms);
+}
+
+// ---------- arranque ----------
+$('sesion').addEventListener('change', (ev) => { actual = ev.target.value; servidor = null; ocultos.clear(); $('tarjetas').replaceChildren(); pedirEstado(); render(); });
+$('demo').addEventListener('click', demo);
+function aplicarAnimacion() { document.body.classList.toggle('sin-animacion', !animado); $('animaciones').checked = animado; }
+$('animaciones').addEventListener('change', (ev) => {
+  animado = ev.target.checked;
+  try { localStorage.setItem('orq-animaciones', animado ? '1' : '0'); } catch { /* sin almacenamiento */ }
+  aplicarAnimacion();
+});
+aplicarAnimacion();
+setInterval(pedirEstado, 3000);
+addEventListener('resize', () => render());
+render();
+if (new URLSearchParams(location.search).has('demo')) { estadoConexion('demo', 'ok'); demo(); } else conectar();
+</script>
+</body>
+</html>
