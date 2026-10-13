@@ -10,7 +10,7 @@ import { formatoCosto } from './estado-vista.js';
 import { costoVisible } from './config-vista.js';
 import { iniciarConfiguracion, abrirConfiguracion, hayCambiosConfig } from './configuracion.js';
 import { iniciarAgentes, abrirAgentes } from './agentes-catalogo.js';
-import { admitir, esImagen, nombrePegada, renderFichas } from './adjuntos.js';
+import { admitir, esImagen, nombrePegada, renderFichas, archivosSoltados, avisoCarpetas } from './adjuntos.js';
 
 const $ = (id) => document.getElementById(id);
 const ESTADO_CLASE = { trabajando: 'e-trabajando', 'esperando-permiso': 'e-accion', error: 'e-error', lista: 'e-listo', inactiva: 'e-cola' };
@@ -315,6 +315,8 @@ async function abrir(id, { recarga = false } = {}) {
     estado.desde = 0;
     terminarRenombrar(false);
   }
+  // Los adjuntos son de la conversación en la que se eligieron: al cambiar, se descartan y se liberan sus miniaturas.
+  if (id !== estado.actual) vaciarAdjuntos([...adjuntos]);
   estado.actual = id;
   guardarPreferencia('orq-conversacion', id);
   renderLista();
@@ -400,7 +402,9 @@ vistaChat.addEventListener('drop', (ev) => {
   ev.preventDefault();
   profundidadArrastre = 0;
   vistaChat.classList.remove('arrastrando');
-  agregarArchivos(ev.dataTransfer.files);
+  const { archivos, carpetas } = archivosSoltados(ev.dataTransfer);
+  if (carpetas) toast(avisoCarpetas(carpetas));
+  agregarArchivos(archivos);
 });
 addEventListener('dragover', (ev) => {
   if (!conArchivos(ev)) return;

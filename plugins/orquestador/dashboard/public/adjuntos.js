@@ -3,8 +3,9 @@
 import { el, boton } from './dom.js';
 
 const MB = 1024 * 1024;
-// totalBytes: lo que cabe en el POST de 40 MB una vez codificado en base64.
-export const LIMITES = Object.freeze({ cantidad: 10, archivoBytes: 20 * MB, imagenBytes: 5 * MB, totalBytes: 28 * MB });
+// totalBytes: lo que cabe en el POST de 40 MB una vez codificado en base64. imagenBase64Bytes: una imagen cuyo base64 pasa
+// de 5 MB no se rechaza; va como archivo (el servidor, que también mira la firma y las dimensiones, decide al final).
+export const LIMITES = Object.freeze({ cantidad: 10, archivoBytes: 20 * MB, imagenBase64Bytes: 5 * MB, totalBytes: 28 * MB });
 const TIPOS_IMAGEN = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
 
 export const esImagen = (tipo) => Object.hasOwn(TIPOS_IMAGEN, String(tipo ?? '').toLowerCase());
@@ -19,6 +20,30 @@ export function formatoTamano(bytes) {
   return n < MB ? `${decimal(n / 1024)} KB` : `${decimal(n / MB)} MB`;
 }
 
+// Mismo criterio de tamaño que el servidor: la imagen va en línea si su base64 mide hasta 5 MB.
+export const vaEnLinea = (f) => esImagen(f.type) && Math.ceil(f.size / 3) * 4 <= LIMITES.imagenBase64Bytes;
+// Tamaño de la ficha, con aviso si la imagen irá como archivo (Claude la lee con Read en vez de verla en línea).
+export const detalleFicha = (f) => `${formatoTamano(f.size)}${esImagen(f.type) && !vaEnLinea(f) ? ' · irá como archivo' : ''}`;
+
+// Archivos de un drop sin las carpetas (el navegador las entrega como entradas sin tipo y de tamaño 0).
+// dataTransfer: { items?, files }. Con webkitGetAsEntry se distingue la carpeta; si no, se descarta lo que parece una.
+export function archivosSoltados(dataTransfer) {
+  const items = [...(dataTransfer?.items ?? [])].filter((i) => i.kind === 'file');
+  if (items.length && items.every((i) => typeof i.webkitGetAsEntry === 'function')) {
+    const archivos = [];
+    let carpetas = 0;
+    for (const i of items) {
+      if (i.webkitGetAsEntry()?.isDirectory) carpetas++;
+      else { const f = i.getAsFile(); if (f) archivos.push(f); }
+    }
+    return { archivos, carpetas };
+  }
+  const todos = [...(dataTransfer?.files ?? [])];
+  const archivos = todos.filter((f) => f.type || f.size > 0);
+  return { archivos, carpetas: todos.length - archivos.length };
+}
+export const avisoCarpetas = (n) => (n === 1 ? 'No se pueden adjuntar carpetas; se omitió 1.' : `No se pueden adjuntar carpetas; se omitieron ${n} carpetas.`);
+
 // actuales y nuevos: File (o { name, size, type }). Devuelve los nuevos que caben y un error en español por cada rechazo.
 export function admitir(actuales, nuevos) {
   const aceptados = [];
@@ -28,7 +53,6 @@ export function admitir(actuales, nuevos) {
   for (const f of nuevos) {
     if (actuales.length + aceptados.length >= LIMITES.cantidad) { sobrantes++; continue; }
     if (f.size > LIMITES.archivoBytes) { errores.push(`${f.name} pesa más de 20 MB, el máximo por archivo.`); continue; }
-    if (esImagen(f.type) && f.size > LIMITES.imagenBytes) { errores.push(`La imagen ${f.name} pesa más de 5 MB, el máximo para imágenes.`); continue; }
     if (total + f.size > LIMITES.totalBytes) { errores.push(`No se agregó ${f.name}: los adjuntos de un mensaje suman como máximo 28 MB en total.`); continue; }
     total += f.size;
     aceptados.push(f);
@@ -84,7 +108,7 @@ export function renderFichas(contenedor, items, alQuitar) {
       f.append(img);
     } else f.append(icono(extension(a.archivo.name)));
     const datos = el('span', 'datos-adjunto');
-    datos.append(el('span', 'nombre-adjunto', a.archivo.name), el('span', 'tenue', formatoTamano(a.archivo.size)));
+    datos.append(el('span', 'nombre-adjunto', a.archivo.name), el('span', 'tenue', detalleFicha(a.archivo)));
     f.append(datos, boton('×', 'quitar', () => alQuitar(a.id), `Quitar ${a.archivo.name}`));
     return f;
   }));

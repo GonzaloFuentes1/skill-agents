@@ -6,7 +6,7 @@ import { join, dirname, basename } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  LIMITES, MAX_CUERPO_MENSAJE, sanearNombre, tipoImagen, validarAdjuntos, guardarAdjuntos, textoConAdjuntos, contenidoMensaje,
+  LIMITES, MAX_CUERPO_MENSAJE, sanearNombre, tipoImagen, dimensionesImagen, validarAdjuntos, guardarAdjuntos, textoConAdjuntos, contenidoMensaje,
 } from '../plugins/orquestador/dashboard/adjuntos.mjs';
 import { ErrorConversacion, crearGestor } from '../plugins/orquestador/dashboard/conversaciones.mjs';
 import { argumentos, abrirProceso, mensajeUsuario } from '../plugins/orquestador/dashboard/proceso-claude.mjs';
@@ -20,7 +20,24 @@ import { ESPERAR_USUARIO, INIT, texto, fin, turnoSimple } from './fixtures/guion
 
 const FALSO = fileURLToPath(new URL('./fixtures/claude-falso.mjs', import.meta.url));
 const MB = 1024 * 1024;
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('cuerpo de png')]);
+// PNG real de 1×1.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+// Cabeceras sintéticas con las dimensiones pedidas (el contenido no se decodifica; solo se leen las cabeceras).
+const u32 = (n) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
+const u16be = (n) => { const b = Buffer.alloc(2); b.writeUInt16BE(n); return b; };
+const u16le = (n) => { const b = Buffer.alloc(2); b.writeUInt16LE(n); return b; };
+const u24le = (n) => Buffer.from([n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff]);
+const IEND = Buffer.from([0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]);
+const png = (ancho, alto, relleno = 0) => Buffer.concat([
+  PNG.subarray(0, 8), u32(13), Buffer.from('IHDR'), u32(ancho), u32(alto), Buffer.from([8, 6, 0, 0, 0]), u32(0),
+  u32(relleno), Buffer.from('IDAT'), Buffer.alloc(relleno), u32(0), IEND,
+]);
+const gif = (ancho, alto) => Buffer.concat([Buffer.from('GIF89a'), u16le(ancho), u16le(alto), Buffer.from([0, 0, 0]), Buffer.from([0x3b])]);
+const webp = (ancho, alto) => Buffer.concat([Buffer.from('RIFF'), u32(0), Buffer.from('WEBPVP8X'), u32(10), Buffer.alloc(4), u24le(ancho - 1), u24le(alto - 1)]);
+const jpeg = (ancho, alto) => Buffer.concat([
+  Buffer.from([0xff, 0xd8, 0xff, 0xe0]), u16be(16), Buffer.from('JFIF\0'), Buffer.alloc(9),
+  Buffer.from([0xff, 0xc0]), u16be(17), Buffer.from([8]), u16be(alto), u16be(ancho), Buffer.alloc(10), Buffer.from([0xff, 0xd9]),
+]);
 const b64 = (x) => Buffer.from(x).toString('base64');
 const lanza = (fn, status, patron) => assert.throws(fn, (e) => e instanceof ErrorConversacion && e.status === status && (!patron || patron.test(e.message)), `esperaba ${status}`);
 
@@ -43,8 +60,25 @@ test('sanearNombre: sin carpetas, "..", separadores ni caracteres de control', (
   assert.equal(sanearNombre('/'), 'archivo');
   assert.equal(sanearNombre('reunión 2026 (final).docx'), 'reunión 2026 (final).docx');
   const largo = sanearNombre(`${'x'.repeat(300)}.pdf`);
-  assert.ok(largo.length <= 120, largo.length);
+  assert.ok(Buffer.byteLength(largo) <= 186, largo.length);
   assert.ok(largo.endsWith('.pdf'));
+});
+
+test('sanearNombre: quita los caracteres invisibles (separadores de línea, ancho cero y BOM)', () => {
+  assert.equal(sanearNombre('a b c.txt'), 'abc.txt');
+  assert.equal(sanearNombre('in​vi‌si‍ble‎‏.txt'), 'invisible.txt');
+  assert.equal(sanearNombre('﻿bom.txt'), 'bom.txt');
+});
+
+test('sanearNombre: el tope se cuenta en bytes UTF-8 y, con la marca de tiempo, no pasa de 200 bytes (ext4 admite 255)', () => {
+  const n = sanearNombre(`${'日本語'.repeat(50)}.pdf`);
+  assert.ok(n.endsWith('.pdf'), n);
+  assert.ok(n.startsWith('日本語'), n);
+  assert.ok(Buffer.byteLength(`${Date.now()}-${n}`) <= 200, Buffer.byteLength(n));
+  assert.ok(!n.includes('�'), 'no corta un carácter a la mitad');
+  // Un emoji (par sustituto) tampoco se parte.
+  const e = sanearNombre(`${'😀'.repeat(100)}.png`);
+  assert.ok(Buffer.byteLength(e) <= 186 && e.endsWith('.png') && !e.includes('�'));
 });
 
 // ---------- límites y validación ----------
@@ -72,19 +106,47 @@ test('validarAdjuntos: lista vacía o ausente; forma inválida da 400', () => {
   assert.equal(a.mediaType, null);
 });
 
-test('validarAdjuntos: hasta 10 adjuntos, archivos de hasta 20 MB e imágenes de hasta 5 MB', () => {
-  assert.deepEqual([LIMITES.cantidad, LIMITES.archivoBytes, LIMITES.imagenBytes], [10, 20 * MB, 5 * MB]);
+test('validarAdjuntos: hasta 10 adjuntos y archivos de hasta 20 MB', () => {
+  assert.deepEqual([LIMITES.cantidad, LIMITES.archivoBytes, LIMITES.imagenBase64Bytes, LIMITES.imagenLado], [10, 20 * MB, 5 * MB, 8000]);
   const uno = { nombre: 'a.txt', datos: b64('x') };
   assert.equal(validarAdjuntos(Array(10).fill(uno)).length, 10);
   lanza(() => validarAdjuntos(Array(11).fill(uno)), 400, /10/);
   // Un archivo justo en el límite pasa; uno más grande da 413.
   assert.equal(validarAdjuntos([{ nombre: 'g.bin', datos: Buffer.alloc(20 * MB).toString('base64') }])[0].datos.length, 20 * MB);
   lanza(() => validarAdjuntos([{ nombre: 'g.bin', datos: Buffer.alloc(20 * MB + 1).toString('base64') }]), 413, /g\.bin.*20 MB/);
-  // Una imagen (por firma) de más de 5 MB da 413; el mismo tamaño en un archivo que no es imagen pasa.
-  const grande = Buffer.concat([PNG, Buffer.alloc(5 * MB)]);
-  lanza(() => validarAdjuntos([{ nombre: 'foto.png', datos: grande.toString('base64') }]), 413, /foto\.png.*5 MB/);
   assert.equal(validarAdjuntos([{ nombre: 'datos.csv', datos: Buffer.alloc(5 * MB + 10).toString('base64') }])[0].mediaType, null);
-  assert.equal(validarAdjuntos([{ nombre: 'foto.png', datos: PNG.toString('base64') }])[0].mediaType, 'image/png');
+  const [f] = validarAdjuntos([{ nombre: 'foto.png', datos: PNG.toString('base64') }]);
+  assert.deepEqual([f.mediaType, f.enLinea], ['image/png', true]);
+});
+
+test('dimensionesImagen: lee ancho y alto de la cabecera de png, gif, webp y jpeg; null si no puede', () => {
+  assert.deepEqual(dimensionesImagen(PNG, 'image/png'), { ancho: 1, alto: 1 });
+  assert.deepEqual(dimensionesImagen(png(9000, 20), 'image/png'), { ancho: 9000, alto: 20 });
+  assert.deepEqual(dimensionesImagen(gif(320, 240), 'image/gif'), { ancho: 320, alto: 240 });
+  assert.deepEqual(dimensionesImagen(webp(8001, 2), 'image/webp'), { ancho: 8001, alto: 2 });
+  assert.deepEqual(dimensionesImagen(jpeg(640, 8200), 'image/jpeg'), { ancho: 640, alto: 8200 });
+  assert.equal(dimensionesImagen(PNG.subarray(0, 12), 'image/png'), null);
+  assert.equal(dimensionesImagen(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 2]), 'image/jpeg'), null);
+});
+
+test('enLinea: solo si el base64 mide ≤ 5 MB, los lados ≤ 8000 px y la cabecera se lee; si no, la imagen va como archivo', () => {
+  const caso = (datos) => validarAdjuntos([{ nombre: 'i', datos: datos.toString('base64') }])[0];
+  assert.equal(caso(png(100, 100)).enLinea, true);
+  assert.equal(caso(gif(10, 10)).enLinea, true);
+  assert.equal(caso(webp(10, 10)).enLinea, true);
+  assert.equal(caso(jpeg(10, 10)).enLinea, true);
+  // Entre ~3,75 y 5 MB de bytes, el base64 ya pasa de 5 MB: no va en línea, pero se acepta (sin 413).
+  const mediana = caso(png(100, 100, 4 * MB));
+  assert.deepEqual([mediana.mediaType, mediana.enLinea], ['image/png', false]);
+  assert.equal(caso(png(100, 100, Math.floor(3.7 * MB))).enLinea, true);
+  assert.equal(caso(png(8001, 10)).enLinea, false);
+  assert.equal(caso(png(8000, 8000)).enLinea, true);
+  assert.equal(caso(jpeg(10, 8001)).enLinea, false);
+  // PNG con firma válida pero sin IHDR legible o truncado (sin IEND): va como archivo.
+  assert.equal(caso(Buffer.concat([PNG.subarray(0, 8), Buffer.from('basura')])).enLinea, false);
+  assert.equal(caso(PNG.subarray(0, PNG.length - 12)).enLinea, false);
+  // Una imagen grande (hasta 20 MB) se acepta como archivo; ya no hay 413 por imágenes.
+  assert.equal(caso(png(100, 100, 12 * MB)).enLinea, false);
 });
 
 test('guardarAdjuntos: <dir>/<marca>-<nombre saneado>, sin pisar archivos con el mismo nombre', () => {
@@ -128,8 +190,10 @@ test('la vista separa el pie que arma el servidor: texto limpio y adjuntos con n
 });
 
 test('contenidoMensaje: sin imágenes es un string; con imágenes, bloques image en base64 y luego el texto', () => {
-  assert.equal(contenidoMensaje('hola', [{ nombre: 'a.txt', ruta: '/a', mediaType: null, datos: Buffer.from('x') }]), 'hola');
-  const c = contenidoMensaje('mira', [{ nombre: 'f.png', ruta: '/f', mediaType: 'image/png', datos: PNG }, { nombre: 'a.txt', ruta: '/a', mediaType: null, datos: Buffer.from('x') }]);
+  assert.equal(contenidoMensaje('hola', [{ nombre: 'a.txt', ruta: '/a', mediaType: null, enLinea: false, datos: Buffer.from('x') }]), 'hola');
+  // Una imagen que no va en línea queda solo en el pie (el texto).
+  assert.equal(contenidoMensaje('hola', [{ nombre: 'g.png', ruta: '/g', mediaType: 'image/png', enLinea: false, datos: PNG }]), 'hola');
+  const c = contenidoMensaje('mira', [{ nombre: 'f.png', ruta: '/f', mediaType: 'image/png', enLinea: true, datos: PNG }, { nombre: 'a.txt', ruta: '/a', mediaType: null, enLinea: false, datos: Buffer.from('x') }]);
   assert.deepEqual(c, [
     { type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG.toString('base64') } },
     { type: 'text', text: 'mira' },
@@ -258,6 +322,29 @@ test('gestor: un mensaje con adjuntos que llega mientras el proceso se cierra se
   assert.match(contenidos[1][1].text, /^dos\n\n\[Adjuntos\]\n- f\.png: /);
 });
 
+test('gestor: una imagen que no cabe en línea se guarda y queda solo en el pie (Claude la lee con Read)', async (t) => {
+  const { env, spawnFn, home, leerRegistro } = entorno(turnoSimple());
+  const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'mira', [{ nombre: 'grande.png', datos: png(9000, 100).toString('base64') }]);
+  await hasta((e) => e.tipo === 'chat:fin-turno');
+  const content = leerRegistro().find((r) => r.stdin?.type === 'user').stdin.message.content;
+  assert.equal(typeof content, 'string');
+  assert.match(content, /^mira\n\n\[Adjuntos\]\n- grande\.png: .*grande\.png$/);
+  assert.equal(readdirSync(rutaAdjuntos(c.id, env)).length, 1);
+});
+
+test('gestor: si no se puede lanzar Claude Code, los adjuntos recién guardados se borran', () => {
+  const { env, spawnFn, home } = entorno(turnoSimple(), { rutaClaude: '' });
+  const g = crearGestor({ env: { ...env, PATH: '', Path: '' }, spawnFn });
+  const c = g.crear({ cwd: home });
+  lanza(() => g.enviar(c.id, 'x', [{ nombre: 'a.txt', datos: b64('hola') }]), 500, /binario/);
+  const dir = rutaAdjuntos(c.id, env);
+  assert.ok(!existsSync(dir) || readdirSync(dir).length === 0, 'no quedan archivos huérfanos');
+});
+
 // ---------- historial ----------
 test('historial: los bloques image del usuario llegan como bloques imagen, sin base64', () => {
   const linea = JSON.stringify({ type: 'user', uuid: 'u1', message: { role: 'user', content: [
@@ -293,12 +380,41 @@ test('vista: al recargar, las imágenes del transcript son fichas "Imagen" salvo
 test('front: límites iguales a los del servidor y el total cabe en el cuerpo del POST', () => {
   assert.equal(front.LIMITES.cantidad, LIMITES.cantidad);
   assert.equal(front.LIMITES.archivoBytes, LIMITES.archivoBytes);
-  assert.equal(front.LIMITES.imagenBytes, LIMITES.imagenBytes);
+  assert.equal(front.LIMITES.imagenBase64Bytes, LIMITES.imagenBase64Bytes);
   assert.ok(Math.ceil(front.LIMITES.totalBytes / 3) * 4 + 64 * 1024 < MAX_CUERPO_MENSAJE, 'el total en base64 más el texto cabe en el cuerpo');
   assert.ok(MAX_CUERPO_MENSAJE >= 39 * MB && MAX_CUERPO_MENSAJE <= 41 * MB);
 });
 
-test('front: admitir respeta la cantidad, el tamaño por archivo, el de las imágenes y el total, con errores en español', () => {
+test('front: vaEnLinea usa el mismo criterio que el servidor (base64 ≤ 5 MB) y la ficha avisa cuando la imagen irá como archivo', () => {
+  const f = (size, type = 'image/png') => ({ name: 'i', size, type });
+  assert.equal(front.vaEnLinea(f(3 * MB)), true);
+  assert.equal(front.vaEnLinea(f(Math.floor(3.7 * MB))), true);
+  assert.equal(front.vaEnLinea(f(4 * MB)), false); // su base64 pasa de 5 MB
+  assert.equal(front.vaEnLinea(f(10, 'application/octet-stream')), false);
+  assert.equal(front.detalleFicha(f(4 * MB)), '4 MB · irá como archivo');
+  assert.equal(front.detalleFicha(f(1536)), '1,5 KB');
+  assert.equal(front.detalleFicha(f(4 * MB, 'application/pdf')), '4 MB');
+});
+
+test('front: archivosSoltados descarta carpetas (webkitGetAsEntry o, sin él, entradas sin tipo y de tamaño 0)', () => {
+  const archivo = (name, size, type) => ({ name, size, type });
+  const a = archivo('a.pdf', 10, 'application/pdf');
+  const conEntradas = {
+    items: [
+      { kind: 'file', getAsFile: () => a, webkitGetAsEntry: () => ({ isDirectory: false }) },
+      { kind: 'file', getAsFile: () => archivo('fotos', 0, ''), webkitGetAsEntry: () => ({ isDirectory: true }) },
+      { kind: 'string', getAsFile: () => null },
+    ],
+    files: [],
+  };
+  assert.deepEqual(front.archivosSoltados(conEntradas), { archivos: [a], carpetas: 1 });
+  const sinEntradas = { items: undefined, files: [a, archivo('docs', 0, ''), archivo('vacio.txt', 0, 'text/plain')] };
+  assert.deepEqual(front.archivosSoltados(sinEntradas), { archivos: [a, archivo('vacio.txt', 0, 'text/plain')], carpetas: 1 });
+  assert.match(front.avisoCarpetas(1), /carpeta/);
+  assert.match(front.avisoCarpetas(2), /2 carpetas/);
+});
+
+test('front: admitir respeta la cantidad, el tamaño por archivo y el total, con errores en español', () => {
   const f = (name, size, type = 'application/pdf') => ({ name, size, type });
   const ok = front.admitir([], [f('a.pdf', 10), f('b.png', 10, 'image/png')]);
   assert.equal(ok.aceptados.length, 2);
@@ -309,9 +425,9 @@ test('front: admitir respeta la cantidad, el tamaño por archivo, el de las imá
   const grande = front.admitir([], [f('g.zip', 20 * MB + 1), f('ok.zip', 20 * MB)]);
   assert.deepEqual(grande.aceptados.map((x) => x.name), ['ok.zip']);
   assert.match(grande.errores[0], /g\.zip.*20 MB/);
-  const imagen = front.admitir([], [f('foto.jpg', 5 * MB + 1, 'image/jpeg')]);
-  assert.deepEqual(imagen.aceptados, []);
-  assert.match(imagen.errores[0], /foto\.jpg.*5 MB/);
+  // Una imagen grande ya no se rechaza: va como archivo hasta 20 MB.
+  const imagen = front.admitir([], [f('foto.jpg', 8 * MB, 'image/jpeg')]);
+  assert.deepEqual([imagen.aceptados.length, imagen.errores], [1, []]);
   const total = front.admitir([f('a', 20 * MB)], [f('b', 20 * MB)]);
   assert.deepEqual(total.aceptados, []);
   assert.match(total.errores[0], /en total/);
@@ -370,10 +486,9 @@ test('HTTP: enviar mensaje responde 413 por encima de ~40 MB y 400/413 con adjun
     assert.equal(r400.status, 400);
     assert.match(r400.json().error, /10/);
     assert.equal((await post(base, ruta, { texto: 'x', adjuntos: 'nada' }, cookie)).status, 400);
-    const imagen = Buffer.concat([PNG, Buffer.alloc(5 * MB)]).toString('base64');
-    const r413 = await post(base, ruta, { texto: 'x', adjuntos: [{ nombre: 'foto.png', datos: imagen }] }, cookie);
+    const r413 = await post(base, ruta, { texto: 'x', adjuntos: [{ nombre: 'g.bin', datos: Buffer.alloc(20 * MB + 1).toString('base64') }] }, cookie);
     assert.equal(r413.status, 413);
-    assert.match(r413.json().error, /5 MB/);
+    assert.match(r413.json().error, /20 MB/);
     // Tras los rechazos, un envío normal sigue funcionando.
     assert.equal((await post(base, ruta, { texto: 'hola' }, cookie)).status, 202);
     assert.equal((await pedir(base, '/api/conversaciones', { headers: { cookie } })).status, 200);

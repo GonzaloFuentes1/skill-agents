@@ -302,7 +302,12 @@ export function crearGestor({
       try { guardados = guardarAdjuntos(rutaAdjuntos(c.id, env), lista); } catch (e) { throw new ErrorConversacion(500, `No se pudieron guardar los adjuntos: ${e.message}`); }
       // Si el proceso se está cerrando (inactividad o "Cerrar proceso"), escribirle sería perder el mensaje.
       const esperaSalida = cerrando.has(c.id) && procesos.has(c.id);
-      const p = esperaSalida ? null : asegurarProceso(c);
+      let p = null;
+      try { p = esperaSalida ? null : asegurarProceso(c); } catch (e) {
+        // Sin proceso no hay mensaje: los adjuntos recién guardados no deben quedar huérfanos.
+        for (const g of guardados) { try { rmSync(g.ruta, { force: true }); } catch { /* se intentó */ } }
+        throw e;
+      }
       desarmar('inactividad', c.id);
       interrumpidas.delete(c.id);
       const resumen = t || `Adjuntos: ${guardados.map((g) => g.nombre).join(', ')}`;
