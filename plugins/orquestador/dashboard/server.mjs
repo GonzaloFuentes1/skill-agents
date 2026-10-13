@@ -205,7 +205,14 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
     if (url.pathname === '/salud') return json(res, { ok: true, app: 'orquestador-dashboard', version: VERSION, raiz: RAIZ_DASHBOARD, pid: process.pid });
     if (url.pathname === '/' && url.searchParams.has('t')) {
       const r = auth.canjear(req, url.searchParams.get('t'));
-      if (r.status === 302) { res.writeHead(302, { 'set-cookie': r.cookie, location: '/', 'cache-control': 'no-store' }).end(); return; }
+      if (r.status === 302) {
+        // Se conservan los demás parámetros (p. ej. demo=1); el destino es siempre relativo a "/".
+        const resto = new URLSearchParams(url.searchParams);
+        resto.delete('t');
+        const consulta = resto.toString();
+        res.writeHead(302, { 'set-cookie': r.cookie, location: consulta ? `/?${consulta}` : '/', 'cache-control': 'no-store' }).end();
+        return;
+      }
       const textos = { 405: 'Método no permitido', 429: 'Demasiados intentos; espera un minuto.' };
       res.writeHead(r.status, { 'content-type': 'text/plain; charset=utf-8' }).end(textos[r.status] ?? 'Token inválido. Abre el dashboard con /orquestador:dashboard.');
       return;

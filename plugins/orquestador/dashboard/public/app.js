@@ -4,7 +4,7 @@ import { chatVacio, desdeHistorial, reducirChat } from './chat-vista.js';
 import { renderChat } from './chat.js';
 import { renderAgentes } from './agentes-panel.js';
 import {
-  iniciarActividad, procesarEvento, inicioConexion, finReplay, mostrarSesion, vistaActual, alCambiar, fijarCostoVisible, fijarModeloOrquestador,
+  iniciarActividad, procesarEvento, inicioConexion, finReplay, mostrarSesion, vistaActual, alCambiar, fijarCostoVisible, fijarModeloOrquestador, fijarCostoOrquestador,
 } from './actividad.js';
 import { formatoCosto } from './estado-vista.js';
 import { costoVisible } from './config-vista.js';
@@ -73,6 +73,7 @@ function mostrarPestana(p) {
     $(tab).setAttribute('aria-selected', String(activa));
     $(vista).hidden = !activa;
   }
+  document.body.classList.toggle('pestana-actividad', p === 'actividad');
   if (p === 'actividad') dispatchEvent(new Event('resize'));
 }
 $('tab-chat').addEventListener('click', () => mostrarPestana('chat'));
@@ -114,8 +115,10 @@ function renderCabecera() {
   chip.title = c?.modelo ? `Modelo del orquestador: ${c.modelo}` : '';
   chip.replaceChildren(el('span', 'punto'), document.createTextNode(capitalizar(fam)));
   fijarModeloOrquestador(c?.modelo ?? null);
+  fijarCostoOrquestador(c?.costoUSD ?? 0);
   const sub = $('subtitulo');
   sub.replaceChildren();
+  sub.title = c?.cwd ?? '';
   if (c) {
     sub.append(document.createTextNode(c.cwd));
     if (c.rama) {
@@ -147,21 +150,21 @@ function empezarRenombrar() {
   input.focus();
   input.select();
 }
-function terminarRenombrar(guardar) {
+function terminarRenombrar(guardar, devolverFoco = false) {
   if (!editandoTitulo) return;
   editandoTitulo = false;
   const c = convActual();
   const nuevo = $('titulo-input').value.trim();
   $('titulo-input').hidden = true;
   $('titulo').hidden = false;
-  $('titulo').focus();
+  if (devolverFoco) $('titulo').focus();
   if (guardar && c && nuevo && nuevo !== c.titulo) api('POST', ruta(c, 'titulo'), { titulo: nuevo }).catch((e) => toast(e.message));
   renderCabecera();
 }
 $('titulo').addEventListener('click', empezarRenombrar);
 $('titulo-input').addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter') { ev.preventDefault(); terminarRenombrar(true); }
-  else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); terminarRenombrar(false); }
+  if (ev.key === 'Enter') { ev.preventDefault(); terminarRenombrar(true, true); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); terminarRenombrar(false, true); }
 });
 $('titulo-input').addEventListener('blur', () => terminarRenombrar(false));
 

@@ -64,6 +64,16 @@ test('el canje del token por HTTP solo se acepta con GET', async () => {
   } finally { await srv.detener(); }
 });
 
+test('el canje conserva los demás parámetros de la consulta en el 302', async () => {
+  const { srv, base } = await levantar();
+  try {
+    const r = await pedir(base, `/?t=${srv.auth.token}&demo=1`);
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.location, '/?demo=1');
+    assert.equal((await pedir(base, `/?t=${srv.auth.token}`)).headers.location, '/');
+  } finally { await srv.detener(); }
+});
+
 test('titulo, interrumpir, cerrar y carpetas por HTTP', async () => {
   const { srv, base, cookie, home } = await levantar({ guion: [ESPERAR_USUARIO, INIT] }); // el turno queda abierto
   try {

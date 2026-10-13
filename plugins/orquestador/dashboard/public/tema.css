@@ -78,7 +78,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 24px; background: var(--cabecera); border-bottom: 1px solid var(--borde-fuerte); }
 .titulo-conv { flex: 1 1 260px; min-width: 0; }
 .titulo-conv h1 { margin: 0; font-family: var(--serif); font-size: 21px; font-weight: 500; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.titulo-conv #subtitulo { font-family: var(--mono); font-size: 12px; color: var(--texto-3); }
+.titulo-conv #subtitulo { font-family: var(--mono); font-size: 12px; color: var(--texto-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pestanas { display: flex; padding: 3px; border-radius: 10px; background: var(--lateral); border: 1px solid var(--borde); }
 .pestanas button { min-height: 44px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--texto-2); cursor: pointer; }
 .pestanas button[aria-selected="true"] { background: var(--tarjeta); color: var(--texto); font-weight: 600; }
@@ -110,6 +110,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pensando summary { cursor: pointer; color: var(--texto-3); font-size: 13px; }
 .herramienta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 8px 12px; border-radius: 10px; background: var(--hundido); border: 1px solid var(--borde); font-size: 13px; }
 .herramienta .nombre { font-weight: 600; }
+.herramienta { overflow-wrap: anywhere; min-width: 0; }
 .herramienta code { overflow-wrap: anywhere; color: var(--texto-2); }
 .herramienta .resultado { width: 100%; color: var(--texto-3); font-size: 12px; }
 .herramienta.mal { border-color: color-mix(in srgb, var(--error) 50%, transparent); }
@@ -198,7 +199,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .denegacion .bloque-codigo { width: 100%; }
 .barrera-humana { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--accion); background: color-mix(in srgb, var(--accion) 12%, transparent); }
 .barrera-humana .texto-barrera { flex: 1 1 260px; display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
-.barrera-humana strong { color: var(--accion); }
+.barrera-humana strong { flex: none; white-space: nowrap; color: var(--accion); }
 .rombo-mini { width: 12px; height: 12px; flex: none; transform: rotate(45deg); border: 2px solid var(--accion); border-radius: 3px; }
 
 /* Costo de la conversación: orquestador, agentes y total */
@@ -241,5 +242,10 @@ dialog input, dialog select { min-height: 42px; padding: 0 12px; border-radius: 
   .composer { padding: 12px 16px 16px; }
   .plan-detalle { grid-template-columns: minmax(0, 1fr); }
   .burbuja { max-width: 92%; }
+}
+/* En Actividad el mapa y su resumen usan el ancho del panel de agentes (en pantallas anchas) */
+@media (min-width: 1181px) {
+  body.pestana-actividad .app { grid-template-columns: 260px minmax(0, 1fr); }
+  body.pestana-actividad .agentes { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .punto, .escribiendo::after { animation: none !important; } }

@@ -32,6 +32,7 @@ const ocultos = new Set();      // nodos cuya tarjeta todavía viaja
 let costoVisible = true;        // lo fija app.js (config.mostrarCosto + atajo de sesión)
 let modeloOrquestador = null;   // modelo de la conversación abierta (evento sesion del proceso)
 let alternarCosto = null;       // callback de app.js para el botón Mostrar/Ocultar
+let costoOrquestador = 0;       // costo acumulado del proceso del orquestador (lo fija app.js)
 let firmaResumen = null;
 
 const hora = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
@@ -64,8 +65,6 @@ function crearNodo(n) {
 
 function actualizarNodo(nodo, n, p, num) {
   const clase = claseNodo(n);
-  nodo.style.left = `${p.x * 100}%`;
-  nodo.style.top = `${p.y * 100}%`;
   for (const c of Object.keys(VAR_ESTADO)) nodo.classList.toggle(`e-${c}`, c === clase);
   nodo.classList.toggle('activo', n.estado === 'activo');
   nodo.classList.toggle('compacto', p.compacto);
@@ -73,12 +72,15 @@ function actualizarNodo(nodo, n, p, num) {
   nodo.classList.toggle('oculto', ocultos.has(n.id));
   nodo.querySelector('.nombre').textContent = nombreAgente(n.agente);
   nodo.querySelector('.num').textContent = num;
-  nodo.querySelector('.estado-nodo').textContent = p.compacto ? ({ error: '✕', cola: '?' }[clase] ?? '✓') : TEXTO_NODO[clase];
+  nodo.querySelector('.estado-nodo').textContent = p.compacto ? ({ error: '✕', cola: '?' }[clase] ?? '✓') : '';
   nodo.querySelector('.meta').textContent = n.meta || 'Sin meta';
   const pie = nodo.querySelector('.pie');
   pie.replaceChildren(chipModelo(n.modelo, n.esfuerzo));
   if (n.resultado) pie.append(el('span', 'tenue', textoResultado(n.resultado)));
+  pie.append(el('span', 'estado-texto', TEXTO_NODO[clase]));
+  nodo.setAttribute('aria-label', `${nombreAgente(n.agente)} ${num}: ${TEXTO_NODO[clase]}`);
   const tooltip = [
+    `Estado: ${TEXTO_NODO[clase]}`,
     n.meta, `Pedido: ${etiquetaModelo(n.modelo, n.esfuerzo)}${n.resultado?.modeloReal ? ` · real: ${n.resultado.modeloReal}` : ''}`,
     n.resultado && textoResultado(n.resultado), n.persona && `Persona: ${n.persona}`, n.origen && `Modelo: ${n.origen}`, n.alerta && `⚠ ${n.alerta}`,
   ].filter(Boolean).join('\n');
@@ -86,6 +88,53 @@ function actualizarNodo(nodo, n, p, num) {
   const badge = nodo.querySelector('.badge');
   if (n.alerta && !badge) nodo.append(el('span', 'badge', '⚠'));
   if (!n.alerta && badge) badge.remove();
+}
+
+const posPx = {}; // id -> { x, y } en px dentro del escenario (la animación viaja hasta ahí)
+const acotar = (v, min, max) => Math.max(min, Math.min(max, v));
+
+// Coloca cada tarjeta con su tamaño real: completa dentro del escenario, sin tapar al orquestador ni a las demás.
+// Devuelve null si el escenario no se ve (pestaña oculta).
+function colocar(posiciones) {
+  const r = escenario.getBoundingClientRect();
+  const W = r.width, H = r.height;
+  if (!W || !H) return null;
+  escenario.style.setProperty('--nodo-w', `${Math.round(acotar(W * 0.38, 112, 188))}px`);
+  const caja = $('centro').querySelector('.centro-caja');
+  const centro = { x: W / 2, y: H / 2, w: caja.offsetWidth + 28, h: caja.offsetHeight + 28 };
+  const items = posiciones.map((p) => {
+    const nodo = $('nodos').querySelector(`[data-id="${CSS.escape(p.id)}"]`);
+    return { id: p.id, x: p.x * W, y: p.y * H, w: nodo.offsetWidth, h: nodo.offsetHeight };
+  });
+  const dentro = (it) => { it.x = acotar(it.x, it.w / 2 + 10, W - it.w / 2 - 10); it.y = acotar(it.y, it.h / 2 + 10, H - it.h / 2 - 10); };
+  // Hay solape si las cajas, con 8 px de margen, se pisan en los dos ejes.
+  const solape = (a, b) => {
+    const dx = Math.abs(a.x - b.x) - (a.w + b.w) / 2 - 8, dy = Math.abs(a.y - b.y) - (a.h + b.h) / 2 - 8;
+    return dx < 0 && dy < 0 ? { dx, dy } : null;
+  };
+  // Colocación voraz: los activos primero (vienen antes en posiciones). Cada tarjeta parte de su sitio ideal y, si choca con el
+  // orquestador o con una ya colocada, se busca el hueco libre más cercano en círculos crecientes (siempre dentro del escenario).
+  const puestas = [];
+  const libre = (it) => !solape(it, centro) && !puestas.some((o) => solape(it, o));
+  for (const it of items) {
+    const ideal = { x: it.x, y: it.y };
+    dentro(it);
+    if (!libre(it)) {
+      let hallado = null;
+      for (let radio = 8; radio <= Math.max(W, H) && !hallado; radio += 8) {
+        const pasos = Math.max(12, Math.round(radio / 6));
+        for (let k = 0; k < pasos && !hallado; k += 1) {
+          const ang = (2 * Math.PI * k) / pasos;
+          const c = { ...it, x: ideal.x + radio * Math.cos(ang), y: ideal.y + radio * Math.sin(ang) };
+          dentro(c);
+          if (libre(c)) hallado = c;
+        }
+      }
+      if (hallado) { it.x = hallado.x; it.y = hallado.y; }
+    }
+    puestas.push(it);
+  }
+  return Object.fromEntries(items.map((it) => [it.id, { x: it.x, y: it.y, W, H }]));
 }
 
 function renderNodos(s) {
@@ -96,14 +145,25 @@ function renderNodos(s) {
   for (const linea of [...svg.querySelectorAll('line')]) if (!vivos.has(linea.dataset.id)) linea.remove();
   for (const p of posiciones) {
     const n = s.nodos[p.id];
-    const clase = claseNodo(n);
     let nodo = $('nodos').querySelector(`[data-id="${CSS.escape(p.id)}"]`);
     if (!nodo) { nodo = crearNodo(n); $('nodos').append(nodo); }
     actualizarNodo(nodo, n, p, nums[p.id] ?? '');
+  }
+  const colocadas = colocar(posiciones);
+  for (const id of Object.keys(posPx)) if (!vivos.has(id)) delete posPx[id];
+  for (const p of posiciones) {
+    const n = s.nodos[p.id];
+    const clase = claseNodo(n);
+    const nodo = $('nodos').querySelector(`[data-id="${CSS.escape(p.id)}"]`);
+    const c = colocadas?.[p.id];
+    const fx = c ? c.x / c.W : p.x, fy = c ? c.y / c.H : p.y;
+    if (c) posPx[p.id] = { x: c.x, y: c.y };
+    nodo.style.left = `${fx * 100}%`;
+    nodo.style.top = `${fy * 100}%`;
     let linea = svg.querySelector(`line[data-id="${CSS.escape(p.id)}"]`);
     if (!linea) { linea = document.createElementNS(NS, 'line'); linea.dataset.id = p.id; svg.append(linea); }
     linea.setAttribute('x1', '50'); linea.setAttribute('y1', '50');
-    linea.setAttribute('x2', String(p.x * 100)); linea.setAttribute('y2', String(p.y * 100));
+    linea.setAttribute('x2', String(fx * 100)); linea.setAttribute('y2', String(fy * 100));
     // Las variables CSS no valen en los atributos de presentación del SVG: el color va por style.
     linea.style.stroke = `var(${n.alerta ? '--error' : VAR_ESTADO[clase]})`;
     linea.setAttribute('class', `${n.estado === 'activo' && !ocultos.has(p.id) ? 'activa' : 'quieta'}${clase === 'cola' ? ' discontinua' : ''}`);
@@ -140,12 +200,13 @@ function bloque(titulo, ...hijos) {
 function renderResumen(s) {
   const st = s?.stats ?? { activos: 0, completados: 0, costoUSD: 0, alertas: 0, bloqueos: 0, fable: 0 };
   // El estado del servidor suma toda la sesión; la vista local solo ve los últimos eventos del historial.
-  const costo = Math.max(st.costoUSD, servidor?.estado?.costoUSD ?? 0);
+  const costoAgentes = Math.max(st.costoUSD, servidor?.estado?.costoUSD ?? 0);
+  const costo = costoAgentes + costoOrquestador;
   const fableUsados = servidor?.estado?.fableUsados ?? st.fable;
   const grupos = pedidoVsReal(s);
   const familiaOrq = familiaModelo(modeloOrquestador ?? servidor?.estado?.modeloPrincipal);
   // Solo se reconstruye si cambió algo: así el botón Mostrar/Ocultar no pierde el foco con cada consulta.
-  const firma = JSON.stringify([actual, costo, costoVisible, st.activos, st.alertas, fableUsados, servidor?.config, grupos, familiaOrq]);
+  const firma = JSON.stringify([actual, costoAgentes, costoOrquestador, costoVisible, st.activos, st.alertas, fableUsados, servidor?.config, grupos, familiaOrq]);
   if (firma === firmaResumen) return;
   firmaResumen = firma;
   const teniaFoco = $('stats').contains(document.activeElement);
@@ -155,6 +216,7 @@ function renderResumen(s) {
   if (alternarCosto) cab.append(boton(costoVisible ? 'Ocultar' : 'Mostrar', 'boton-texto', alternarCosto, costoVisible ? 'Ocultar costo' : 'Mostrar costo'));
   const bloqueCosto = el('section', 'bloque-resumen');
   bloqueCosto.append(cab, el('strong', 'costo-grande', costoVisible ? formatoCosto(costo) : '••••'),
+    el('span', 'tenue nota', costoVisible ? `Orquestador ${formatoCosto(costoOrquestador)} · Agentes ${formatoCosto(costoAgentes)}` : 'Orquestador + agentes'),
     el('span', 'tenue nota', 'Referencial: se calcula con la tabla de precios. Lo cubre tu plan.'));
 
   const limites = bloque('Límites',
@@ -186,7 +248,8 @@ function renderTimeline(s) {
   if (!items.length) { $('timeline').replaceChildren(el('li', 'tenue', 'Sin eventos todavía.')); return; }
   $('timeline').replaceChildren(...items.map((t) => {
     const et = etiquetaEvento(t);
-    const partes = [t.agente && nombreAgente(t.agente), t.modelo, t.texto].filter(Boolean);
+    const modelo = String(t.modelo ?? '').split('·').map((x) => x.trim()).filter((x) => x && x !== '—').map((x, i) => (i === 0 ? capitalizar(x) : x)).join(' · ');
+    const partes = [t.agente && nombreAgente(t.agente), modelo, t.texto].filter(Boolean);
     if (t.tipo === 'fin' && t.costoUSD && costoVisible) partes.push(formatoCosto(t.costoUSD));
     if (t.regla) partes.push(`[${t.regla}]`);
     const li = el('li', 'evento');
@@ -225,6 +288,9 @@ function viajar(tarjeta, desde, hasta, alLlegar) {
   tarjeta.style.left = `${desde.x}px`;
   tarjeta.style.top = `${desde.y}px`;
   $('tarjetas').append(tarjeta);
+  // La tarjeta que viaja también debe caber completa en el escenario.
+  const r = escenario.getBoundingClientRect();
+  hasta = { x: acotar(hasta.x, tarjeta.offsetWidth / 2 + 4, r.width - tarjeta.offsetWidth / 2 - 4), y: acotar(hasta.y, tarjeta.offsetHeight / 2 + 4, r.height - tarjeta.offsetHeight / 2 - 4) };
   tarjeta.getBoundingClientRect(); // fuerza el estado inicial antes de la transición
   tarjeta.classList.add('en-viaje');
   tarjeta.style.left = `${hasta.x}px`;
@@ -261,7 +327,7 @@ function animar(efecto) {
     const n = s.nodos[efecto.id];
     ocultos.add(n.id);
     render();
-    viajar(tarjetaEnvio(n, numeracion(s)[n.id]), px(centro), px(posicionOrbital(n.slot)), () => {
+    viajar(tarjetaEnvio(n, numeracion(s)[n.id]), px(centro), posPx[n.id] ?? px(posicionOrbital(n.slot)), () => {
       ocultos.delete(n.id);
       render();
       const nodo = $('nodos').querySelector(`[data-id="${CSS.escape(n.id)}"]`);
@@ -271,7 +337,7 @@ function animar(efecto) {
   } else if (efecto.tipo === 'volver') {
     const n = s.nodos[efecto.id];
     render();
-    viajar(tarjetaRecibo(n, numeracion(s)[n.id]), px(posicionOrbital(n.slot)), px(centro), () => {});
+    viajar(tarjetaRecibo(n, numeracion(s)[n.id]), posPx[n.id] ?? px(posicionOrbital(n.slot)), px(centro), () => {});
   } else if (efecto.tipo === 'bloqueo') {
     render();
     const c = $('centro');
@@ -377,6 +443,13 @@ export function fijarCostoVisible(visible) {
   costoVisible = !!visible;
   firmaResumen = null;
   render();
+}
+
+export function fijarCostoOrquestador(usd) {
+  const v = Number(usd) || 0;
+  if (v === costoOrquestador) return;
+  costoOrquestador = v;
+  renderResumen(sesion());
 }
 
 export function fijarModeloOrquestador(modelo) {
