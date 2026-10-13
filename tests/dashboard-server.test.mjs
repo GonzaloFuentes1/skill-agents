@@ -79,3 +79,18 @@ test('SSE: replay del historial, marca de fin y eventos en vivo', async () => {
     assert.equal(recibidos[2][1].meta, 'Diseño');
   } finally { await srv.detener(); }
 });
+
+test('index.html: estructura, módulo de vista y sin innerHTML ni recursos externos', async () => {
+  const { srv, base } = await levantar();
+  try {
+    const { texto } = await get(base, '/');
+    for (const id of ['escenario', 'lineas', 'nodos', 'tarjetas', 'centro', 'sesion', 'seguir', 'conexion', 'stats', 'timeline', 'toast', 'demo']) {
+      assert.match(texto, new RegExp(`id="${id}"`), `falta #${id}`);
+    }
+    assert.match(texto, /from '\.\/estado-vista\.js'/);
+    assert.match(texto, /prefers-reduced-motion/);
+    assert.match(texto, /prefers-color-scheme/);
+    assert.doesNotMatch(texto, /innerHTML/);
+    assert.doesNotMatch(texto, /https?:\/\/(?!127\.0\.0\.1)/);
+  } finally { await srv.detener(); }
+});
