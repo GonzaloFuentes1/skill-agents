@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Sonda del protocolo stream-json para el chat del dashboard (entrega 1).
 // Uso: node bench/sondas/stream-json.mjs   (consume uso de tu cuenta: 2 turnos cortos en haiku)
+//      node bench/sondas/stream-json.mjs --escritura   (fuerza una solicitud de permiso; gasta lo mismo: 2 turnos cortos en haiku)
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -50,4 +51,6 @@ hijo.on('close', (codigo) => {
   writeFileSync(archivo, lineas.join('\n') + '\n');
   console.log(JSON.stringify({ codigo, archivo, stderr: stderr.trim().slice(-500), ...resumirStreamJson(lineas) }, null, 2));
 });
-usuario('Ejecuta con Bash el comando `node --version` y responde solo con la versión.');
+usuario(process.argv.includes('--escritura')
+  ? 'Crea el archivo prueba.txt con el contenido hola usando la herramienta Write y responde solo "listo".'
+  : 'Ejecuta con Bash el comando `node --version` y responde solo con la versión.');
