@@ -28,3 +28,14 @@ test('resumirStreamJson sin datos no rompe', () => {
   const r = resumirStreamJson([]);
   assert.deepEqual([r.permisoHost, r.turnos, r.sessionId], [false, 0, null]);
 });
+
+test('resumirStreamJson cuenta cancelaciones y lista los subtype de cada result en orden', () => {
+  const r = resumirStreamJson([
+    L({ type: 'result', subtype: 'success' }),
+    L({ type: 'control_cancel_request', request_id: 'r1' }),
+    L({ type: 'result', subtype: 'error_during_execution' }),
+  ]);
+  assert.equal(r.cancelaciones, 1);
+  assert.deepEqual(r.resultados, ['success', 'error_during_execution']);
+  assert.deepEqual([resumirStreamJson([]).cancelaciones, resumirStreamJson([]).resultados], [0, []]);
+});

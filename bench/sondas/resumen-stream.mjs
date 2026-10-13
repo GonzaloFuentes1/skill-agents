@@ -17,6 +17,8 @@ export function resumirStreamJson(lineas) {
     ejemploPermiso: permisos[0] ?? null,
     turnos: resultados.length,
     variosTurnosEnUnProceso: resultados.length >= 2,
+    resultados: resultados.map((m) => m.subtype ?? null),
+    cancelaciones: msgs.filter((m) => m.type === 'control_cancel_request').length,
     controles: msgs.filter((m) => m.type === 'control_response')
       .map((m) => ({ id: m.response?.request_id ?? null, subtipo: m.response?.subtype ?? null, error: m.response?.error ?? null })),
   };
