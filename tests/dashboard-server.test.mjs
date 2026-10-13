@@ -83,17 +83,24 @@ test('SSE: replay del historial, marca de fin y eventos en vivo', async () => {
   } finally { await srv.detener(); }
 });
 
-test('index.html: estructura, módulo de vista y sin innerHTML ni recursos externos', async () => {
+test('frontend: estructura, módulos y sin innerHTML ni recursos externos', async () => {
   const { srv, base } = await levantar();
   try {
-    const { texto } = await get(base, '/');
-    for (const id of ['escenario', 'lineas', 'nodos', 'tarjetas', 'centro', 'sesion', 'seguir', 'conexion', 'stats', 'timeline', 'toast', 'demo']) {
-      assert.match(texto, new RegExp(`id="${id}"`), `falta #${id}`);
+    const html = (await get(base, '/')).texto;
+    for (const id of ['escenario', 'lineas', 'nodos', 'tarjetas', 'centro', 'centro-modelo', 'sesion', 'seguir', 'animaciones', 'conexion', 'stats', 'timeline', 'toast', 'demo', 'vacio',
+      'conversaciones', 'nueva', 'uso', 'titulo', 'subtitulo', 'tab-chat', 'tab-actividad', 'vista-chat', 'vista-actividad', 'mensajes', 'composer', 'entrada', 'enviar', 'detener',
+      'modo', 'tema', 'panel-agentes', 'menu', 'ver-agentes', 'dialogo-nueva', 'form-nueva', 'carpeta', 'carpetas', 'modo-nueva', 'cancelar-nueva', 'error-nueva']) {
+      assert.match(html, new RegExp(`id="${id}"`), `falta #${id}`);
     }
-    assert.match(texto, /from '\.\/estado-vista\.js'/);
-    assert.match(texto, /prefers-reduced-motion/);
-    assert.match(texto, /prefers-color-scheme/);
-    assert.doesNotMatch(texto, /innerHTML/);
-    assert.doesNotMatch(texto, /https?:\/\/(?!127\.0\.0\.1)/);
+    assert.match(html, /<script type="module" src="\.\/app\.js"><\/script>/);
+    assert.match((await get(base, '/actividad.js')).texto, /from '\.\/estado-vista\.js'/);
+    assert.match((await get(base, '/actividad.js')).texto, /prefers-reduced-motion/);
+    assert.match((await get(base, '/tema.css')).texto, /\[data-tema="claro"\]/);
+    for (const archivo of ['/', '/app.js', '/actividad.js', '/chat.js', '/plan.js', '/agentes-panel.js', '/dom.js', '/chat-vista.js', '/plan-vista.js', '/tema.css', '/actividad.css']) {
+      const r = await get(base, archivo);
+      assert.equal(r.status, 200, archivo);
+      assert.doesNotMatch(r.texto, /innerHTML/, `${archivo} usa innerHTML`);
+      assert.doesNotMatch(r.texto, /https?:\/\/(?!127\.0\.0\.1)[a-z]/i, `${archivo} carga recursos externos`);
+    }
   } finally { await srv.detener(); }
 });

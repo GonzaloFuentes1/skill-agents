@@ -1,4 +1,4 @@
-// Utilidades de DOM compartidas (solo textContent y atributos, nunca innerHTML) y helpers puros de nombres y estados.
+// Utilidades de DOM compartidas (solo textContent y atributos, nunca HTML en cadenas) y helpers puros de nombres y estados.
 export function el(tag, clase, texto) {
   const e = document.createElement(tag);
   if (clase) e.className = clase;

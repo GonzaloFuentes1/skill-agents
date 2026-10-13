@@ -151,6 +151,6 @@ test('M8: un fin que llega después de "sin-cierre" igual se registra sin descon
 
 // M5→Important: la animación de llegada no la tapa el pulso.
 test('M5: el CSS combina aparecer + pulso para nodos activos recién llegados', () => {
-  const html = readFileSync(fileURLToPath(new URL('../plugins/orquestador/dashboard/public/index.html', import.meta.url)), 'utf8');
-  assert.match(html, /\.nodo\.activo\.nuevo\s*\{[^}]*animation:[^}]*aparecer[^}]*pulso/);
+  const css = readFileSync(fileURLToPath(new URL('../plugins/orquestador/dashboard/public/actividad.css', import.meta.url)), 'utf8');
+  assert.match(css, /\.nodo\.activo\.nuevo\s*\{[^}]*animation:[^}]*aparecer[^}]*pulso/);
 });

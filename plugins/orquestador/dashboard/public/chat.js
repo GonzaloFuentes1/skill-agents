@@ -1,4 +1,4 @@
-// Render del chat: mensajes, herramientas, delegaciones, permisos y planes. Sin innerHTML.
+// Render del chat: mensajes, herramientas, delegaciones, permisos y planes. Solo nodos DOM, sin HTML en cadenas.
 import { el, boton, chipModelo, nombreAgente, claseEstado, textoEstado } from './dom.js';
 import { segmentar, estadoEtapas } from './plan-vista.js';
 import { renderPlan } from './plan.js';
