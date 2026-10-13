@@ -44,6 +44,11 @@ export function reducirChat(chat, e) {
         for (const r of e.bloques ?? []) { const h = herramientaPorId(chat, r.usoId); if (h) h.resultado = { ok: r.ok, texto: r.texto }; }
         break;
       }
+      if (e.rol === 'notificacion') {
+        const id = e.mensajeId ?? `n${chat.mensajes.length}`;
+        if (!chat.mensajes.some((x) => x.id === id)) chat.mensajes.push({ rol: 'notificacion', id, bloques: (e.bloques ?? []).map((b) => ({ ...b })) });
+        break;
+      }
       let m = e.mensajeId ? chat.mensajes.find((x) => x.rol === 'asistente' && x.id === e.mensajeId) : null;
       if (!m) { m = { rol: 'asistente', id: e.mensajeId ?? `a${chat.mensajes.length}`, bloques: [] }; chat.mensajes.push(m); }
       for (const b of e.bloques ?? []) if (!m.bloques.some((x) => mismoBloque(x, b))) m.bloques.push({ ...b });

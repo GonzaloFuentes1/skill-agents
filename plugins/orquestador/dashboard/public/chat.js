@@ -33,6 +33,36 @@ export function modeloDenegacion(b, alBloquear) {
   };
 }
 
+// Aviso interno de Claude Code cuando un agente en segundo plano termina (llega como mensaje de usuario, pero no lo es).
+const ESTADO_TAREA = { completed: ['Terminó', 'e-listo'], failed: ['Falló', 'e-error'], killed: ['Se detuvo', 'e-cola'], stopped: ['Se detuvo', 'e-cola'] };
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+function duracion(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}`;
+  return `${Math.floor(s / 3600)} h${Math.floor(s % 3600 / 60) ? ` ${Math.floor(s % 3600 / 60)} min` : ''}`;
+}
+const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toLocaleString('es-CL', { maximumFractionDigits: 1 })} M tokens` : n >= 1000 ? `${Math.round(n / 1000)} mil tokens` : `${n} tokens`);
+
+export function modeloNotificacion(b) {
+  const [estado, clase] = ESTADO_TAREA[b?.estado] ?? [b?.estado || 'Terminó', 'e-cola'];
+  const detalle = [
+    Number.isFinite(b?.herramientas) ? plural(b.herramientas, 'herramienta', 'herramientas') : null,
+    Number.isFinite(b?.duracionMs) ? duracion(b.duracionMs) : null,
+    Number.isFinite(b?.tokens) ? tokens(b.tokens) : null,
+  ].filter(Boolean).join(' · ');
+  return { titulo: b?.titulo || 'Agente en segundo plano', estado, clase, detalle };
+}
+
+function tarjetaNotificacion(b, ctx) {
+  const m = modeloNotificacion(b);
+  const fila = b.usoId && ctx.verAgente ? boton(null, `notificacion ${m.clase}`, () => ctx.verAgente(b.usoId)) : el('div', `notificacion ${m.clase}`);
+  fila.append(el('span', 'punto'), el('span', 'versalita', 'Agente'), el('span', 'nombre', m.titulo));
+  if (m.detalle) fila.append(el('span', 'tenue', m.detalle));
+  fila.append(el('span', 'estado', m.estado));
+  return fila;
+}
+
 function rotuloOrquestador(extra) {
   const r = el('div', 'rotulo');
   r.append(el('span', 'punto-orq'), el('span', 'versalita', 'Orquestador'));
@@ -71,6 +101,11 @@ function bloqueHerramienta(b, ctx) {
 
 function renderMensaje(m, ctx) {
   if (m.rol === 'denegado') return tarjetaDenegacion(m.bloques[0], ctx);
+  if (m.rol === 'notificacion') {
+    const d = el('div', 'msg notificaciones');
+    for (const b of m.bloques) d.append(tarjetaNotificacion(b, ctx));
+    return d;
+  }
   if (m.rol === 'usuario') {
     const d = el('div', 'msg usuario');
     d.append(el('span', 'versalita tenue', ctx.nombreUsuario), el('div', 'burbuja', m.bloques.map((b) => b.texto).join('\n')));

@@ -2,7 +2,7 @@
 import { readdirSync, existsSync, openSync, readSync, fstatSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { bloquesDe, resultadosDe } from './bloques.mjs';
+import { bloquesDe, resultadosDe, notificacionesDe } from './bloques.mjs';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const ESCONDIDO = /^\s*<(command-|local-command|system-reminder)/;
@@ -54,8 +54,11 @@ export function mensajesDesdeTranscript(texto) {
         const h = herramientas.get(r.usoId);
         if (h) h.resultado = { ok: r.ok, texto: r.texto };
       }
-      const bloques = bloquesDe(c).filter((b) => b.tipo === 'texto' && !ESCONDIDO.test(b.texto) && !INTERRUMPIDO.test(b.texto));
-      if (bloques.length) mensajes.push({ rol: 'usuario', id: e.uuid ?? `u${mensajes.length}`, bloques });
+      const textos = bloquesDe(c).filter((b) => b.tipo === 'texto' && !ESCONDIDO.test(b.texto) && !INTERRUMPIDO.test(b.texto));
+      const avisos = textos.flatMap((b) => notificacionesDe(b.texto));
+      const bloques = textos.filter((b) => !notificacionesDe(b.texto).length);
+      if (avisos.length) mensajes.push({ rol: 'notificacion', id: e.uuid ?? `n${mensajes.length}`, bloques: avisos });
+      if (bloques.length) mensajes.push({ rol: 'usuario', id: e.uuid ? `${e.uuid}${avisos.length ? '-u' : ''}` : `u${mensajes.length}`, bloques });
     } else if (e.type === 'assistant') {
       const id = e.message?.id ?? e.uuid ?? `a${mensajes.length}`;
       let m = porId.get(id);
