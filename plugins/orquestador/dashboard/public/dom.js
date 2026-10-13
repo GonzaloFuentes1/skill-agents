@@ -36,8 +36,8 @@ export function chipModelo(modelo, esfuerzo) {
   return c;
 }
 
-export const claseEstado = (n) => (!n ? 'cola' : n.estado === 'activo' ? 'trabajando' : n.estado === 'fallido' ? 'error' : n.estado === 'sin-cierre' ? 'cola' : 'listo');
-export const textoEstado = (n) => ({ cola: 'En cola', trabajando: 'Trabajando', error: 'Falló', listo: 'Listo' })[claseEstado(n)];
+export const claseEstado = (n) => (!n ? 'cola' : n.estado === 'activo' ? 'trabajando' : n.estado === 'fallido' ? 'error' : n.estado === 'sin-cierre' || n.estado === 'detenido' ? 'cola' : 'listo');
+export const textoEstado = (n) => (n?.estado === 'detenido' ? 'Detenido' : { cola: 'En cola', trabajando: 'Trabajando', error: 'Falló', listo: 'Listo' }[claseEstado(n)]);
 export const horaCorta = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
 
 export function preferencia(clave, defecto) {

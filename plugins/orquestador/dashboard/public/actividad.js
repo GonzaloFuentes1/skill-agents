@@ -66,6 +66,7 @@ function crearNodo(n) {
 
 function actualizarNodo(nodo, n, p, num) {
   const clase = claseNodo(n);
+  const texto = n.estado === 'detenido' ? 'Detenido' : TEXTO_NODO[clase];
   for (const c of Object.keys(VAR_ESTADO)) nodo.classList.toggle(`e-${c}`, c === clase);
   nodo.classList.toggle('activo', n.estado === 'activo');
   nodo.classList.toggle('compacto', p.compacto);
@@ -73,15 +74,15 @@ function actualizarNodo(nodo, n, p, num) {
   nodo.classList.toggle('oculto', ocultos.has(n.id));
   nodo.querySelector('.nombre').textContent = nombreAgente(n.agente);
   nodo.querySelector('.num').textContent = num;
-  nodo.querySelector('.estado-nodo').textContent = p.compacto ? ({ error: '✕', cola: '?' }[clase] ?? '✓') : '';
+  nodo.querySelector('.estado-nodo').textContent = p.compacto ? (n.estado === 'detenido' ? '■' : { error: '✕', cola: '?' }[clase] ?? '✓') : '';
   nodo.querySelector('.meta').textContent = n.meta || 'Sin meta';
   const pie = nodo.querySelector('.pie');
   pie.replaceChildren(chipModelo(n.modelo, n.esfuerzo));
   if (n.resultado) pie.append(el('span', 'tenue', textoResultado(n.resultado)));
-  pie.append(el('span', 'estado-texto', TEXTO_NODO[clase]));
-  nodo.setAttribute('aria-label', `${nombreAgente(n.agente)} ${num}: ${TEXTO_NODO[clase]}`);
+  pie.append(el('span', 'estado-texto', texto));
+  nodo.setAttribute('aria-label', `${nombreAgente(n.agente)} ${num}: ${texto}`);
   const tooltip = [
-    `Estado: ${TEXTO_NODO[clase]}`,
+    `Estado: ${texto}`,
     n.meta, `Pedido: ${etiquetaModelo(n.modelo, n.esfuerzo)}${n.resultado?.modeloReal ? ` · real: ${n.resultado.modeloReal}` : ''}`,
     n.resultado && textoResultado(n.resultado), n.persona && `Persona: ${n.persona}`, n.origen && `Modelo: ${n.origen}`, n.alerta && `⚠ ${n.alerta}`,
   ].filter(Boolean).join('\n');
@@ -310,8 +311,8 @@ function tarjetaEnvio(n, num) {
 
 function tarjetaRecibo(n, num) {
   const r = n.resultado ?? {};
-  const t = el('div', `tarjeta recibo ${n.estado === 'fallido' || n.alerta ? 'e-error' : 'e-listo'}`);
-  t.append(el('div', 'rotulo', `${n.estado === 'fallido' ? '✕ Falló' : '✓ Listo'} ← ${nombreAgente(n.agente)}${num ? ` ${num}` : ''}`));
+  const t = el('div', `tarjeta recibo ${n.estado === 'detenido' ? 'e-cola' : n.estado === 'fallido' || n.alerta ? 'e-error' : 'e-listo'}`);
+  t.append(el('div', 'rotulo', `${n.estado === 'detenido' ? '■ Detenido' : n.estado === 'fallido' ? '✕ Falló' : '✓ Listo'} ← ${nombreAgente(n.agente)}${num ? ` ${num}` : ''}`));
   t.append(el('div', 'titulo', r.modeloReal ?? 'modelo no informado'));
   const fila = el('div', 'fila');
   fila.append(el('span', 'chip', `${formatoTokens(r.tokensIn)} / ${formatoTokens(r.tokensOut)} tok`));

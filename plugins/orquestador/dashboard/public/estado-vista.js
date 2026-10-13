@@ -89,14 +89,14 @@ export function reducir(vista, e) {
       if (n && e.agentId) n.agentId = e.agentId;
       if (!n ||(n.estado !== 'activo' && n.estado !== 'sin-cierre')) return { vista, efecto: null };
       const eraActivo = n.estado === 'activo';
-      n.estado = e.ok === false ? 'fallido' : 'terminado';
+      n.estado = e.detenido ? 'detenido' : e.ok === false ? 'fallido' : 'terminado';
       s.cierres += 1;
       n.cierre = s.cierres;
       n.resultado = { modeloReal: e.modeloReal ?? null, tokensIn: e.tokensIn ?? 0, tokensOut: e.tokensOut ?? 0, costoUSD: e.costoUSD ?? 0, duracionMs: e.duracionMs ?? 0 };
       if (eraActivo) s.stats.activos -= 1;
       s.stats.completados += 1;
       s.stats.costoUSD += e.costoUSD ?? 0;
-      anotar({ agente: n.agente, texto: n.meta, modelo: e.modeloReal ? familia(e.modeloReal) : '—', costoUSD: e.costoUSD ?? 0, ok: e.ok !== false });
+      anotar({ agente: n.agente, texto: n.meta, modelo: e.modeloReal ? familia(e.modeloReal) : '—', costoUSD: e.costoUSD ?? 0, ok: e.ok !== false, detenido: !!e.detenido });
       return { vista, efecto: { tipo: 'volver', sesion: s.id, id: e.id } };
     }
     case 'alerta': {
@@ -160,13 +160,13 @@ export function conciliarConServidor(sesion, activasServidor, ahoraMs = Date.now
 }
 
 // ---------- helpers del render de Actividad (entrega 2) ----------
-export const claseNodo = (n) => (n.estado === 'activo' ? 'trabajando' : n.estado === 'fallido' ? 'error' : n.estado === 'sin-cierre' ? 'cola' : 'listo');
+export const claseNodo = (n) => (n.estado === 'activo' ? 'trabajando' : n.estado === 'fallido' ? 'error' : n.estado === 'sin-cierre' || n.estado === 'detenido' ? 'cola' : 'listo');
 export const TEXTO_NODO = { trabajando: 'Trabajando', listo: 'Listo', error: 'Falló', cola: 'Sin cierre' };
 
 export function etiquetaEvento(t) {
   switch (t?.tipo) {
     case 'delegacion': return { texto: 'Delegación', clase: 'e-trabajando' };
-    case 'fin': return t.ok === false ? { texto: 'Falló', clase: 'e-error' } : { texto: 'Fin', clase: 'e-listo' };
+    case 'fin': return t.detenido ? { texto: 'Detenido', clase: 'e-cola' } : t.ok === false ? { texto: 'Falló', clase: 'e-error' } : { texto: 'Fin', clase: 'e-listo' };
     case 'alerta': return { texto: 'Alerta', clase: 'e-error' };
     case 'bloqueo': return { texto: 'Bloqueo', clase: 'e-error' };
     default: return { texto: String(t?.tipo ?? ''), clase: 'e-cola' };

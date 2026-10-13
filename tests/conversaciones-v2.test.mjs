@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { crearGestor, leerLista } from '../plugins/orquestador/dashboard/conversaciones.mjs';
 import { abrirProceso, crearNormalizador } from '../plugins/orquestador/dashboard/proceso-claude.mjs';
 import { rutaConversaciones } from '../plugins/orquestador/scripts/lib/rutas.mjs';
+import { estadoVacio, guardarEstado, leerEstado } from '../plugins/orquestador/scripts/lib/estado.mjs';
+import { leerEventos } from '../plugins/orquestador/scripts/lib/eventos.mjs';
 import { ESPERAR_USUARIO, ESPERAR_RESPUESTA, ESPERAR_PEDIDO, INIT, texto, permiso, fin, finInterrumpido, turnoSimple, denegado } from './fixtures/guiones.mjs';
 
 const FALSO = fileURLToPath(new URL('./fixtures/claude-falso.mjs', import.meta.url));
@@ -284,4 +286,23 @@ test('leerJsonUsuario informa el código de un error de lectura', async () => {
   const r = leerJsonUsuario(dir); // un directorio: la lectura falla por E/S, no por JSON
   assert.equal(r.existe, true);
   assert.equal(typeof r.codigo, 'string');
+});
+
+test('al cerrarse el proceso, sus agentes en segundo plano quedan detenidos y liberan el cupo', async (t) => {
+  const { env, spawnFn } = entorno(turnoSimple());
+  const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: env.ORQUESTADOR_HOME });
+  g.enviar(c.id, 'hola');
+  await hasta((e) => e.tipo === 'chat:fin-turno');
+  const est = estadoVacio('ses-1');
+  est.activas = { t1: { agente: 'investigador', inicio: Date.now(), agentId: 'a1' } };
+  guardarEstado(est, env);
+  g.cerrar(c.id);
+  await hasta((e) => e.tipo === 'chat:estado' && e.conv.estado === 'inactiva');
+  await hasta(() => !Object.keys(leerEstado('ses-1', env).activas).length);
+  const fin = leerEventos({ session: 'ses-1' }, env).find((e) => e.tipo === 'fin');
+  assert.equal(fin.detenido, true);
+  assert.equal(fin.motivo, 'proceso-cerrado');
 });

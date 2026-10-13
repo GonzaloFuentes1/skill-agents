@@ -15,6 +15,10 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "TaskStop",
+        "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/task-stop.mjs"], "timeout": 10 }]
+      },
+      {
         "matcher": "Agent|Task",
         "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/post-agent.mjs"], "timeout": 10 }]
       }
