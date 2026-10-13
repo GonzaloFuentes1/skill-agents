@@ -8,6 +8,8 @@ import {
 } from './actividad.js';
 import { formatoCosto } from './estado-vista.js';
 import { costoVisible } from './config-vista.js';
+import { iniciarConfiguracion, abrirConfiguracion, hayCambiosConfig } from './configuracion.js';
+import { iniciarAgentes, abrirAgentes } from './agentes-catalogo.js';
 
 const $ = (id) => document.getElementById(id);
 const ESTADO_CLASE = { trabajando: 'e-trabajando', 'esperando-permiso': 'e-accion', error: 'e-error', lista: 'e-listo', inactiva: 'e-cola' };
@@ -66,18 +68,24 @@ async function cargarConfigUI() {
 }
 
 // ---------- pestañas y cajones ----------
+const PESTANAS = ['chat', 'actividad', 'agentes', 'config'];
 function mostrarPestana(p) {
-  guardarPreferencia('orq-pestana', p);
-  for (const [tab, vista] of [['tab-chat', 'vista-chat'], ['tab-actividad', 'vista-actividad']]) {
-    const activa = tab === `tab-${p}`;
-    $(tab).setAttribute('aria-selected', String(activa));
-    $(vista).hidden = !activa;
+  const destino = PESTANAS.includes(p) ? p : 'chat';
+  guardarPreferencia('orq-pestana', destino);
+  for (const x of PESTANAS) {
+    const activa = x === destino;
+    $(`tab-${x}`).setAttribute('aria-selected', String(activa));
+    $(`vista-${x}`).hidden = !activa;
   }
-  document.body.classList.toggle('pestana-actividad', p === 'actividad');
-  if (p === 'actividad') dispatchEvent(new Event('resize'));
+  document.body.dataset.pestana = destino;
+  document.body.classList.toggle('pestana-actividad', destino === 'actividad');
+  if (destino === 'actividad') dispatchEvent(new Event('resize'));
+  if (destino === 'agentes') abrirAgentes();
+  if (destino === 'config') abrirConfiguracion();
 }
-$('tab-chat').addEventListener('click', () => mostrarPestana('chat'));
-$('tab-actividad').addEventListener('click', () => mostrarPestana('actividad'));
+for (const x of PESTANAS) $(`tab-${x}`).addEventListener('click', () => mostrarPestana(x));
+// Cambios sin guardar en Configuración: el navegador pregunta antes de cerrar o recargar.
+addEventListener('beforeunload', (ev) => { if (hayCambiosConfig()) { ev.preventDefault(); ev.returnValue = ''; } });
 $('menu').addEventListener('click', () => document.body.classList.toggle('lateral-abierto'));
 $('ver-agentes').addEventListener('click', () => document.body.classList.toggle('panel-abierto'));
 // Cajones (≤1180 px): se cierran con el velo, con Escape o con el botón "Cerrar panel".
@@ -321,6 +329,7 @@ async function abrir(id, { recarga = false } = {}) {
   firmaUso = null;
   renderTodo();
   actualizarUso();
+  if (document.body.dataset.pestana === 'agentes') abrirAgentes(); // los agentes del proyecto dependen de la conversación abierta
 }
 
 async function enviar(texto) {
@@ -402,7 +411,9 @@ alCambiar(() => renderTodo());
 
 async function arrancar() {
   iniciarActividad({ alternarCosto });
-  mostrarPestana(preferencia('orq-pestana', 'chat') === 'actividad' ? 'actividad' : 'chat');
+  iniciarConfiguracion({ api, toast, alGuardar: (config) => { estado.config = config; aplicarCosto(); renderTodo(); } });
+  iniciarAgentes({ api, toast, conversacionActual: () => estado.actual });
+  mostrarPestana(preferencia('orq-pestana', 'chat'));
   renderTodo();
   try {
     await cargarConversaciones();

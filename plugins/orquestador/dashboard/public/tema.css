@@ -207,6 +207,123 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .bloque-costo .fila { justify-content: space-between; }
 .bloque-costo .total { padding-top: 4px; border-top: 1px solid var(--borde); }
 
+/* ---------- Entrega 2: controles compartidos ---------- */
+.interruptor { position: relative; flex: none; width: 56px; min-height: 44px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.interruptor::before { content: ""; position: absolute; left: 4px; right: 4px; top: 50%; height: 26px; transform: translateY(-50%); border-radius: 13px; background: var(--pista); transition: background .2s; }
+.interruptor .pomo { position: absolute; top: 50%; left: 8px; width: 18px; height: 18px; transform: translateY(-50%); border-radius: 50%; background: var(--tarjeta); box-shadow: 0 1px 3px rgba(0, 0, 0, .4); transition: left .2s; }
+.interruptor[aria-checked="true"]::before { background: var(--listo); }
+.interruptor[aria-checked="true"] .pomo { left: 30px; }
+.interruptor[aria-checked="mixed"]::before { background: color-mix(in srgb, var(--listo) 45%, var(--pista)); }
+.interruptor[aria-checked="mixed"] .pomo { left: 19px; }
+.segmentado { display: flex; flex-wrap: wrap; gap: 6px; }
+.segmentado .opcion { --c: var(--activo); min-height: 44px; min-width: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--borde-fuerte); background: transparent; color: var(--texto-2); cursor: pointer; font-size: 13px; }
+.segmentado .opcion.m-haiku { --c: var(--haiku); } .segmentado .opcion.m-sonnet { --c: var(--sonnet); }
+.segmentado .opcion.m-opus { --c: var(--opus); } .segmentado .opcion.m-fable { --c: var(--fable); } .segmentado .opcion.m-heredado { --c: var(--heredado); }
+.segmentado .opcion[aria-checked="true"], .segmentado .opcion[aria-pressed="true"] { border: 1.5px solid var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); font-weight: 600; }
+.barra-cambios { position: sticky; top: 0; z-index: 4; display: none; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--c, var(--borde-fuerte)); background: color-mix(in srgb, var(--c, var(--tarjeta)) 14%, var(--fondo)); }
+.barra-cambios.visible { display: flex; }
+.barra-cambios .texto-cambios { flex: 1 1 200px; font-weight: 600; color: var(--c, var(--texto)); }
+.error-campo { margin: 0; color: var(--error); font-size: 12.5px; }
+
+/* ---------- Configuración ---------- */
+.vista-config, .vista-agentes { flex: 1; min-height: 0; overflow-y: auto; }
+.vista-config { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 24px; padding: 0 24px 48px; align-items: start; }
+.config-nav { position: sticky; top: 20px; margin-top: 20px; display: flex; flex-direction: column; gap: 2px; }
+.config-nav a { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: var(--texto-2); text-decoration: none; }
+.config-nav a:hover { background: var(--seleccion); color: var(--texto); }
+.config-cuerpo { padding-top: 20px; display: flex; flex-direction: column; gap: 20px; min-width: 0; max-width: 980px; }
+.config-seccion { scroll-margin-top: 72px; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border: 1px solid var(--borde-fuerte); border-radius: 16px; background: var(--tarjeta); }
+.config-cab { display: flex; flex-direction: column; gap: 2px; }
+.config-cab h2 { margin: 0; font-size: 21px; }
+.config-fila { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding-top: 12px; border-top: 1px solid var(--borde); }
+.config-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.config-texto .tenue { font-size: 13px; }
+.niveles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.nivel { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.nivel .cantidad { font-size: 24px; color: var(--c); }
+.nivel .versalita { color: var(--c); }
+.entorno { display: flex; flex-direction: column; gap: 12px; flex: 1 1 320px; min-width: 0; }
+.lista-editable, .campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.config-seccion > .config-texto { flex: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-valor { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; padding-left: 10px; border-radius: 8px; background: var(--hundido); border: 1px solid var(--borde); overflow-wrap: anywhere; }
+.quitar { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--texto-3); cursor: pointer; font-size: 18px; }
+.quitar:hover:not(:disabled) { color: var(--error); }
+.agregar { display: flex; flex-wrap: wrap; gap: 8px; }
+.agregar input { flex: 1 1 200px; } /* en fila; en .campo (columna) el flex-basis sería el alto */
+.agregar input, .campo input { min-width: 0; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--borde-fuerte); background: var(--fondo); }
+.reglas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.grupo-reglas { display: flex; flex-direction: column; gap: 8px; padding: 12px; min-width: 0; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); }
+.lista-reglas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.lista-reglas li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-left: 10px; border-radius: 8px; background: var(--hundido); overflow-wrap: anywhere; }
+.panel-fabrica, .panel-critica { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--hundido); border: 1px solid var(--borde); }
+.panel-fabrica summary { display: flex; align-items: center; min-height: 44px; color: var(--c); font-weight: 600; cursor: pointer; }
+.panel-critica.e-error { border-color: var(--error); }
+.aviso-uso { margin: 0; font-size: 12px; }
+.contador { display: inline-flex; align-items: center; gap: 4px; }
+.boton-contador { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--borde-fuerte); background: transparent; cursor: pointer; font-size: 18px; }
+.contador .valor { min-width: 32px; text-align: center; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fila-rubrica { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; align-items: center; gap: 10px 16px; padding-top: 12px; border-top: 1px solid var(--borde); }
+.nota { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
+.tabla-desplazable { overflow-x: auto; max-width: 100%; }
+.tabla-precios { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; }
+.tabla-precios th, .tabla-precios td { padding: 6px 8px; border-bottom: 1px solid var(--borde); text-align: left; }
+.tabla-precios th[scope="row"] { color: var(--c); white-space: nowrap; }
+.tabla-precios input { width: 100%; min-width: 80px; min-height: 44px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--borde-fuerte); background: var(--fondo); font-family: var(--mono); }
+
+/* ---------- Agentes ---------- */
+.vista-agentes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 20px; padding: 20px 24px 48px; align-items: start; }
+.catalogo { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.catalogo > h2 { margin: 0; font-size: 24px; }
+.buscador input { width: 100%; min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--borde-fuerte); background: var(--tarjeta); }
+.catalogo-lista { display: flex; flex-direction: column; gap: 22px; }
+.grupo-agentes { display: flex; flex-direction: column; gap: 10px; }
+.grupo-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.grupo-cab h3 { margin: 0; font-size: 19px; }
+.rejilla-agentes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 10px; }
+.tarjeta-catalogo { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px; border: 1px solid var(--borde-fuerte); border-radius: 12px; background: var(--tarjeta); }
+.tarjeta-catalogo.seleccionada { border-color: var(--clay); box-shadow: 0 0 0 1px var(--clay); }
+.abrir-agente { display: flex; flex-direction: column; gap: 6px; width: 100%; min-height: 44px; padding: 6px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
+.abrir-agente:hover { background: var(--seleccion); }
+.abrir-agente .desc { font-size: 13px; color: var(--texto-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.abrir-agente > .fila.tenue { justify-content: space-between; font-size: 12px; }
+.nombres { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.nombres strong, .nombres .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inicial { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 8px; background: color-mix(in srgb, var(--clay) 22%, transparent); color: var(--clay); font-weight: 700; }
+.inicial.grande { width: 44px; height: 44px; font-size: 20px; }
+.estado-agente { justify-content: space-between; padding: 0 6px; font-size: 12.5px; }
+.estado-activo { color: var(--listo); } .estado-actualizable { color: var(--accion); } .estado-conflicto { color: var(--error); } .estado-inactivo { color: var(--texto-3); }
+.panel-agente { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 18px; border: 1px solid var(--borde-fuerte); border-radius: 16px; background: var(--panel); }
+.panel-agente h2 { margin: 0; font-size: 21px; }
+.detalle-catalogo, .form-agente { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.detalle-catalogo .bloque { display: flex; flex-direction: column; gap: 6px; }
+.detalle-catalogo .bloque p { margin: 0; }
+.prompt { margin: 0; max-height: 440px; overflow: auto; padding: 12px 14px; border-radius: 10px; background: var(--codigo); border: 1px solid var(--borde); font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.form-agente textarea, .form-agente input[type="text"] { width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--borde-fuerte); background: var(--fondo); resize: vertical; }
+.cab-prompt { flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.redactar { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.redactar .tenue { font-size: 12px; }
+.ruta-archivo { font-size: 12px; overflow-wrap: anywhere; }
+
+@media (max-width: 1180px) {
+  .vista-agentes { grid-template-columns: minmax(0, 1fr); }
+  .panel-agente { position: static; }
+}
+@media (max-width: 760px) {
+  .vista-config { grid-template-columns: minmax(0, 1fr); padding: 0 16px 48px; }
+  .config-nav { position: static; flex-direction: row; flex-wrap: wrap; margin-top: 12px; }
+  .config-cuerpo { padding-top: 0; }
+  .vista-agentes { padding: 16px; }
+  .niveles, .reglas, .fila-rubrica { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Cuatro pestañas: en el celular ocupan una fila completa y, si no caben, se desplazan dentro de su barra (nunca la página). */
+.pestanas { max-width: 100%; overflow-x: auto; }
+@media (max-width: 760px) {
+  .pestanas { flex: 1 1 100%; }
+  .pestanas button { flex: 1 0 auto; padding: 0 8px; font-size: 13px; }
+}
+
 /* Diálogo y toast */
 dialog { border: 1px solid var(--borde-fuerte); border-radius: 16px; background: var(--tarjeta); color: var(--texto); padding: 22px; width: min(520px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgba(0, 0, 0, .5); }
@@ -245,7 +362,9 @@ dialog input, dialog select { min-height: 42px; padding: 0 12px; border-radius: 
 }
 /* En Actividad el mapa y su resumen usan el ancho del panel de agentes (en pantallas anchas) */
 @media (min-width: 1181px) {
-  body.pestana-actividad .app { grid-template-columns: 260px minmax(0, 1fr); }
-  body.pestana-actividad .agentes { display: none; }
+  body.pestana-actividad .app, body[data-pestana="agentes"] .app, body[data-pestana="config"] .app { grid-template-columns: 260px minmax(0, 1fr); }
+  body.pestana-actividad .agentes, body[data-pestana="agentes"] .agentes, body[data-pestana="config"] .agentes { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .punto, .escribiendo::after { animation: none !important; } }
+/* El panel lateral de agentes del chat no aplica en Agentes ni en Configuración */
+body[data-pestana="agentes"] #ver-agentes, body[data-pestana="config"] #ver-agentes { display: none; }

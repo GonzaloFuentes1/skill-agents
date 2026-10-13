@@ -63,3 +63,14 @@ test('tema.css: título editable de 44 px, tarjeta de denegación y franja de ba
   assert.match(css, /\.denegacion\s*\{[^}]*var\(--accion\)/);
   assert.match(css, /\.barrera-humana\s*\{[^}]*var\(--accion\)/);
 });
+
+test('tema.css: interruptores, opciones, contadores y botones de quitar con objetivos de 44 px; la tabla de precios se desplaza en su caja', () => {
+  const css = leer('tema.css');
+  assert.match(css, /\.interruptor\s*\{[^}]*min-height:\s*44px/);
+  assert.match(css, /\.segmentado \.opcion\s*\{[^}]*min-height:\s*44px/);
+  assert.match(css, /\.boton-contador\s*\{[^}]*height:\s*44px/);
+  assert.match(css, /\.quitar\s*\{[^}]*min-height:\s*44px/);
+  assert.match(css, /\.config-nav a\s*\{[^}]*min-height:\s*44px/);
+  assert.match(css, /\.tabla-desplazable\s*\{[^}]*overflow-x:\s*auto/);
+  assert.match(css, /\.pestanas\s*\{[^}]*overflow-x:\s*auto/); // 4 pestañas en 390 px: se desplaza la barra, no la página
+});

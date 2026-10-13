@@ -33,6 +33,8 @@
       <div class="pestanas" role="tablist" aria-label="Vista">
         <button id="tab-chat" type="button" role="tab" aria-selected="true">Chat</button>
         <button id="tab-actividad" type="button" role="tab" aria-selected="false">Actividad</button>
+        <button id="tab-agentes" type="button" role="tab" aria-selected="false">Agentes</button>
+        <button id="tab-config" type="button" role="tab" aria-selected="false">Configuración</button>
       </div>
       <label class="modo">Permisos
         <select id="modo">
@@ -96,6 +98,8 @@
         <aside id="stats" class="resumen" aria-label="Resumen de la sesión"></aside>
       </div>
     </section>
+    <section id="vista-agentes" class="vista-agentes" role="tabpanel" aria-labelledby="tab-agentes" hidden></section>
+    <section id="vista-config" class="vista-config" role="tabpanel" aria-labelledby="tab-config" hidden></section>
   </main>
 
   <aside id="panel-agentes" class="agentes" aria-label="Agentes"></aside>
@@ -120,6 +124,17 @@
     <div class="acciones">
       <button type="submit" class="boton-primario">Crear</button>
       <button id="cancelar-nueva" type="button" class="boton-secundario">Cancelar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dialogo-confirmar" aria-labelledby="confirmar-titulo">
+  <form method="dialog">
+    <h2 id="confirmar-titulo" class="serif"></h2>
+    <p id="confirmar-texto"></p>
+    <div class="acciones">
+      <button id="confirmar-aceptar" value="si" class="boton-primario">Confirmar</button>
+      <button value="no" class="boton-secundario">Cancelar</button>
     </div>
   </form>
 </dialog>
