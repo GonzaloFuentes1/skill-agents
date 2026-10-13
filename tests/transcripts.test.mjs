@@ -70,3 +70,27 @@ test('leerDesde es incremental, ignora la línea a medias y se reinicia si el ar
 test('pasosAgente rechaza rutas que no son .jsonl', () => {
   assert.deepEqual(pasosAgente('/etc/passwd', 0), { pasos: [], siguiente: 0, existe: false });
 });
+
+test('leerDesde lee una línea más larga que la ventana, sin congelarse', () => {
+  const r = join(mkdtempSync(join(tmpdir(), 'orq-larga-')), 'agent-l1.jsonl');
+  const larga = L({ n: 'x'.repeat(40) });
+  writeFileSync(r, `${larga}\n${L({ n: 2 })}\n`);
+  const a = leerDesde(r, 0, 16); // ventana de 16 bytes, la primera línea mide más
+  assert.equal(a.texto, `${larga}\n`);
+  assert.equal(a.siguiente, Buffer.byteLength(`${larga}\n`));
+  const b = leerDesde(r, a.siguiente, 16);
+  assert.deepEqual(b.texto.trim().split('\n').map((l) => JSON.parse(l).n), [2]);
+});
+
+test('leerDesde salta una línea que supera el tope y espera una línea a medio escribir', () => {
+  const r = join(mkdtempSync(join(tmpdir(), 'orq-tope-')), 'agent-t1.jsonl');
+  const gigante = L({ n: 'y'.repeat(60) });
+  writeFileSync(r, `${gigante}\n${L({ n: 2 })}\n`);
+  const a = leerDesde(r, 0, 16, 20); // tope de 20 bytes: la línea de 70 se salta
+  assert.deepEqual(a, { texto: '', siguiente: Buffer.byteLength(`${gigante}\n`), existe: true });
+  const b = leerDesde(r, a.siguiente, 16, 20);
+  assert.deepEqual(b.texto.trim().split('\n').map((l) => JSON.parse(l).n), [2]);
+  const pendiente = join(mkdtempSync(join(tmpdir(), 'orq-tope2-')), 'agent-t2.jsonl');
+  writeFileSync(pendiente, `${'z'.repeat(60)}`);
+  assert.deepEqual(leerDesde(pendiente, 0, 16, 20), { texto: '', siguiente: 0, existe: true });
+});

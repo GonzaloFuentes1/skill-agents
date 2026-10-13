@@ -3,8 +3,15 @@ import { openSync, readSync, fstatSync, closeSync } from 'node:fs';
 import { bloquesDe, resultadosDe, resumenHerramienta, recortar, textoPlano } from './bloques.mjs';
 
 const MAX = 1024 * 1024;
+const TOPE_LINEA = 16 * 1024 * 1024;
 
-export function leerDesde(ruta, desde = 0, max = MAX) {
+const leerTramo = (fd, pos, n) => {
+  const b = Buffer.alloc(n);
+  readSync(fd, b, 0, n, pos);
+  return b;
+};
+
+export function leerDesde(ruta, desde = 0, max = MAX, tope = TOPE_LINEA) {
   let fd;
   try {
     fd = openSync(ruta, 'r');
@@ -12,11 +19,29 @@ export function leerDesde(ruta, desde = 0, max = MAX) {
     const inicio = Number.isInteger(desde) && desde >= 0 && desde <= size ? desde : 0;
     const n = Math.min(size - inicio, max);
     if (n <= 0) return { texto: '', siguiente: inicio, existe: true };
-    const buf = Buffer.alloc(n);
-    readSync(fd, buf, 0, n, inicio);
-    const corte = buf.lastIndexOf(0x0a);
-    if (corte < 0) return { texto: '', siguiente: inicio, existe: true };
-    return { texto: buf.subarray(0, corte + 1).toString('utf8'), siguiente: inicio + corte + 1, existe: true };
+    const primero = leerTramo(fd, inicio, n);
+    const corte = primero.lastIndexOf(0x0a);
+    if (corte >= 0) return { texto: primero.subarray(0, corte + 1).toString('utf8'), siguiente: inicio + corte + 1, existe: true };
+    // La línea es más larga que la ventana: se busca su fin tramo a tramo desde el mismo descriptor.
+    let partes = [primero];
+    let total = n;
+    let pos = inicio + n;
+    let fin = -1;
+    while (pos < size && fin < 0) {
+      const trozo = leerTramo(fd, pos, Math.min(size - pos, max));
+      const i = trozo.indexOf(0x0a);
+      const usado = i >= 0 ? i + 1 : trozo.length;
+      if (partes && total + usado <= tope) partes.push(trozo.subarray(0, usado));
+      else partes = null;
+      total += usado;
+      if (i >= 0) fin = pos + i;
+      pos += trozo.length;
+    }
+    // Sin \n: la línea está a medio escribir, así que se espera.
+    if (fin < 0) return { texto: '', siguiente: inicio, existe: true };
+    // Línea gigante: se salta sin cargarla.
+    if (!partes) return { texto: '', siguiente: fin + 1, existe: true };
+    return { texto: Buffer.concat(partes).toString('utf8'), siguiente: fin + 1, existe: true };
   } catch {
     return { texto: '', siguiente: 0, existe: false };
   } finally {
