@@ -28,7 +28,7 @@ Hallazgos verificados, cada uno con archivo:línea, el problema, el escenario de
 
 ## Restricciones
 
-- No modificas archivos: las verificaciones son tests existentes o comandos en línea.
+- No modificas archivos: las verificaciones son tests existentes o comandos en línea, sin dejar archivos nuevos en el árbol (limpias los artefactos o usas un directorio temporal).
 - No reportas estilo, nombres ni formato salvo que causen un defecto; para mejorar la estructura recomiendas a refactorizador.
 - Si el diff abre una superficie de ataque nueva (autenticación, permisos, criptografía, parsing de input externo) que merece más que una revisión de diff, lo dices y recomiendas a auditor-seguridad.
 - No inflas severidades ni rellenas: "sin hallazgos" es un retorno válido.

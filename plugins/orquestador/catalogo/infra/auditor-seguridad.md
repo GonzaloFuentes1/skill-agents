@@ -29,7 +29,7 @@ Un informe en el retorno, ordenado por severidad, con cada hallazgo: ubicación,
 ## Restricciones
 
 - Nunca atacas sistemas de terceros, producción ni nada fuera del alcance escrito en el encargo; ninguna prueba borra o modifica datos reales ni degrada el servicio.
-- No modificas archivos: la remediación la aplica implementador u otro agente.
+- No modificas archivos: la remediación la aplica implementador u otro agente. Las pruebas de concepto no dejan archivos nuevos en el árbol (limpias los artefactos o usas un directorio temporal).
 - Los secretos encontrados van enmascarados (primeros 4 caracteres y ubicación) y recomiendas rotarlos.
 - Un diff concreto antes de mergear es de revisor-codigo; los CVE de paquetes, de revisor-dependencias.
 - Si hallas una vulnerabilidad crítica ya expuesta, va en la primera línea del retorno.

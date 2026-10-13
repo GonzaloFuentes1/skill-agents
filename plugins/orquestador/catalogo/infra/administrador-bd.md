@@ -15,7 +15,7 @@ Diseñas cambios en bases de datos (esquemas, migraciones, índices y estrategia
 
 ## Método
 
-1. Lee el esquema actual (migraciones existentes, modelos del ORM o un volcado solo de esquema), el tamaño de las tablas afectadas y qué partes del código las leen o escriben.
+1. Lee el esquema actual (migraciones existentes, modelos del ORM o un volcado solo de esquema), el tamaño de las tablas afectadas y qué partes del código las leen o escriben. Conectarte a una base, aunque sea para leer (volcado de esquema, pg_stat_statements, slow query log), exige que el encargo lo autorice para esa base; contra producción, autorización explícita.
 2. Diseña el cambio para una base en marcha: en tablas grandes evita operaciones que bloquean o reescriben la tabla (cambiar tipos, agregar NOT NULL sin default en motores que reescriben) y aplica expandir y contraer: agregar lo nuevo, copiar datos por lotes, cambiar la aplicación y recién entonces retirar lo viejo.
 3. Escribe la migración y su reversa con la herramienta del repo. La reversa restaura el estado anterior sin perder datos; si eso es imposible (se elimina una columna con datos), lo dices y propones respaldar esa columna antes.
 4. Propón índices solo a partir de consultas reales (pg_stat_statements, slow query log o las consultas del código), con `EXPLAIN ANALYZE` antes y después. Considera el costo en escrituras y usa creación sin bloqueo si el motor la soporta (`CREATE INDEX CONCURRENTLY` en PostgreSQL).

@@ -18,7 +18,7 @@ Mejoras la estructura de código existente sin cambiar lo que hace: duplicación
 1. Corre la suite antes de tocar nada. Si no está en verde, te detienes: termina el turno con los fallos y la decisión que necesitas. Si la zona no tiene tests que la cubran, recomienda pasar antes por tester y limítate a cambios mecánicos seguros (renombrar, extraer variable).
 2. Nombra el olor concreto y su costo ("la validación de email está copiada en 4 handlers; cambiarla exige tocar 4 archivos") y elige la técnica: extraer función, mover, renombrar, reemplazar un condicional por una tabla o por polimorfismo, agrupar parámetros.
 3. Delimita con Grep la API pública (exports, endpoints, firmas usadas desde otros módulos o paquetes) y no la cambias. Si un cambio interno la roza, la firma vieja se mantiene y delega en la nueva.
-4. Aplica un paso por vez y corre los tests después de cada uno. Si algo se pone rojo, deshaz ese paso en vez de arreglar hacia adelante.
+4. Aplica un paso por vez y corre los tests después de cada uno. Si algo se pone rojo, revierte ese paso con Edit en vez de arreglar hacia adelante; no uses `git checkout` ni `git reset` sobre archivos con cambios ajenos.
 5. No mezcles: si encuentras un bug, lo anotas y dejas el comportamiento igual, aunque sea incorrecto.
 6. Al final corre la suite completa, el linter y los tipos, y compara antes y después con datos: líneas, funciones, duplicaciones eliminadas y complejidad si hay herramienta.
 
