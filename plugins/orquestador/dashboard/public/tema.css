@@ -164,12 +164,17 @@ button.notificacion:hover { border-color: var(--c); }
 .plan-cab .versalita { color: var(--c); }
 .plan-cab h3 { margin: 0; font-size: 20px; }
 .tuberia { display: flex; align-items: stretch; overflow-x: auto; padding: 18px; }
-.etapa { flex: 0 0 190px; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--borde-fuerte); border-radius: 12px; }
+.rombo-signo { transform: rotate(-45deg); }
+.etapa { flex: 1 0 190px; max-width: 320px; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--borde-fuerte); border-radius: 12px; }
 .etapa.est-trabajando { --c: var(--activo); border-color: var(--activo); background: color-mix(in srgb, var(--activo) 8%, transparent); }
 .etapa.est-lista { --c: var(--listo); } .etapa.est-fallida { --c: var(--error); } .etapa.est-en-cola { --c: var(--cola); }
 .etapa-titulo { display: flex; gap: 8px; align-items: baseline; }
 .etapa-agente { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 9px; background: var(--hundido); border: 1px solid var(--borde); }
 .etapa-agente .nombre { font-size: 13px; font-weight: 600; }
+.etapa-agente .cantidad { color: var(--activo); font-variant-numeric: tabular-nums; }
+.etapa-orquestador { flex-direction: row; align-items: center; gap: 8px; border-style: dashed; }
+.plan-invalido summary { cursor: pointer; font-size: 13px; color: var(--texto-2); min-height: 44px; display: flex; align-items: center; }
+.plan-invalido pre { max-height: 320px; overflow: auto; font-size: 12px; }
 .etapa-estado { margin-top: auto; font-size: 12px; font-weight: 600; color: var(--c); }
 .barrera { flex: 0 0 56px; display: grid; place-items: center; position: relative; }
 .barrera::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: var(--borde-fuerte); }
