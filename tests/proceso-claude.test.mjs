@@ -94,7 +94,7 @@ test('turno simple: sesión, texto parcial, mensaje y fin; canal dashboard y sin
   assert.deepEqual(eventos.filter((e) => e.tipo === 'texto-parcial').map((e) => [e.mensajeId, e.delta]), [['m1', 'Ho'], ['m1', 'la']]);
   assert.deepEqual(eventos.find((e) => e.tipo === 'sesion'), { tipo: 'sesion', sessionId: 'ses-1', modelo: 'claude-opus-5-5' });
   assert.deepEqual(eventos.find((e) => e.tipo === 'mensaje').bloques, [{ tipo: 'texto', texto: 'Hola' }]);
-  assert.deepEqual(eventos.find((e) => e.tipo === 'fin-turno'), { tipo: 'fin-turno', ok: true, costoUSD: 0.01, duracionMs: 900, error: null, sessionId: 'ses-1' });
+  assert.deepEqual(eventos.find((e) => e.tipo === 'fin-turno'), { tipo: 'fin-turno', ok: true, costoUSD: 0.01, duracionMs: 900, error: null, sessionId: 'ses-1', encolados: 0 });
   const [arranque] = leerRegistro();
   assert.equal(arranque.canal, 'dashboard');
   assert.equal(arranque.claudecode, null);

@@ -1,11 +1,13 @@
 // Registro y ciclo de vida de las conversaciones del dashboard. Persiste en ~/.claude/orquestador/conversaciones.json.
-import { readFileSync, writeFileSync, renameSync, mkdirSync, statSync, rmSync } from 'node:fs';
+import { writeFileSync, renameSync, mkdirSync, statSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { EventEmitter } from 'node:events';
 import { rutaConversaciones } from '../scripts/lib/rutas.mjs';
 import { cargarConfig } from '../scripts/lib/config.mjs';
+import { leerJsonUsuario, respaldar } from '../scripts/lib/archivos.mjs';
 import { abrirProceso, resolverBinario, MODOS } from './proceso-claude.mjs';
 
 export class ErrorConversacion extends Error {
@@ -16,6 +18,8 @@ export class ErrorConversacion extends Error {
 const EN_CURSO = new Set(['trabajando', 'esperando-permiso']);
 const TITULO_NUEVO = 'Nueva conversación';
 const DE_ARCHIVO = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+const MAX_DENEGADOS = 20;
+const execFileP = promisify(execFile);
 
 const TIPOS_CC = new Set(['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'build', 'ci', 'chore', 'revert']);
 const comoEtiqueta = (m) => (m && TIPOS_CC.has(m[1].toLowerCase()) ? `[${m[1].toUpperCase()}]` : null);
@@ -31,14 +35,24 @@ export function clavePermiso(herramienta, entrada = {}) {
   return `${herramienta}:${JSON.stringify(entrada)}`;
 }
 
-function ramaDe(cwd) {
+// Rama actual de `cwd` sin bloquear el servidor (git puede tardar en un disco lento o sincronizado).
+export async function ramaDe(cwd) {
   try {
-    return execFileSync('git', ['-C', cwd, 'branch', '--show-current'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, windowsHide: true }).trim() || null;
+    const { stdout } = await execFileP('git', ['-C', cwd, 'branch', '--show-current'], { encoding: 'utf8', timeout: 3000, windowsHide: true });
+    return stdout.trim() || null;
   } catch { return null; }
 }
 
+// Un conversaciones.json dañado se respalda en .corrupto antes de empezar de cero: nunca se pierde en silencio.
 function leerLista(env) {
-  try { const l = JSON.parse(readFileSync(rutaConversaciones(env), 'utf8')); return Array.isArray(l) ? l : []; } catch { return []; }
+  const ruta = rutaConversaciones(env);
+  const { existe, datos, error } = leerJsonUsuario(ruta);
+  if (!existe) return [];
+  if (!error && Array.isArray(datos)) return datos;
+  let respaldo = null;
+  try { respaldo = respaldar(ruta, '.corrupto'); } catch { /* p. ej. la ruta es un directorio */ }
+  console.error(`No se pudo leer ${ruta}${respaldo ? `; se respaldó en ${respaldo}` : ''} y se empieza de cero.`);
+  return [];
 }
 
 const dormir = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -49,13 +63,18 @@ export function crearGestor({
   inactividadProcesoMs = 10 * 60 * 1000, // un proceso en "lista" sin mensajes se cierra; el siguiente lo retoma con --resume
   esperaInterrupcionMs = 10_000, // si tras interrumpir no llega el result, se cierra el proceso
 } = {}) {
-  // Un proceso de una vida anterior del servidor no se puede recuperar: al cerrarse su stdin, claude -p termina solo.
-  const lista = leerLista(env).map((c) => (EN_CURSO.has(c.estado) || c.pid ? { ...c, estado: 'inactiva', pid: null } : c));
+  // Un proceso de una vida anterior del servidor ya terminó: su costo pasa a ser costo previo de la conversación.
+  const lista = leerLista(env).map((c) => {
+    const base = { ...c, costoUSD: c.costoUSD ?? 0, costoPrevio: c.costoUSD ?? 0 };
+    return EN_CURSO.has(c.estado) || c.pid ? { ...base, estado: 'inactiva', pid: null } : base;
+  });
   const procesos = new Map();
   const pendientes = new Map();
   const reglas = new Map();
   const cerrando = new Set();
   const interrumpidas = new Set();
+  const porEnviar = new Map(); // id → textos que llegaron mientras el proceso se cerraba
+  const denegados = new Map(); // id → últimas denegaciones del modo automático (solo en memoria)
   const temporizadores = { inactividad: new Map(), interrupcion: new Map() };
   const emisor = new EventEmitter();
   emisor.setMaxListeners(0);
@@ -92,6 +111,8 @@ export function crearGestor({
     return c;
   };
   const enCurso = () => lista.filter((c) => EN_CURSO.has(c.estado)).length;
+  // total_cost_usd es acumulado por proceso: el total es lo de los procesos anteriores más lo de este.
+  const registrarCosto = (c, e) => { if (typeof e.costoUSD === 'number') c.costoUSD = (c.costoPrevio ?? 0) + e.costoUSD; };
   if (lista.length) guardar();
 
   function asegurarProceso(c) {
@@ -106,11 +127,40 @@ export function crearGestor({
     return p;
   }
 
+  // Tras la salida de un proceso que se cerraba, los mensajes que esperaban abren uno nuevo con --resume.
+  function enviarPendientes(c) {
+    const textos = porEnviar.get(c.id);
+    if (!textos?.length) return;
+    porEnviar.delete(c.id);
+    try {
+      const p = asegurarProceso(c);
+      c.estado = 'trabajando';
+      c.error = null;
+      for (const t of textos) p.enviar(t);
+    } catch (e) {
+      c.estado = 'error';
+      c.error = e.message;
+    }
+    c.ultima = ahora();
+    guardar();
+    emitirEstado(c);
+  }
+
+  async function refrescar(c) {
+    const rama = await ramaDe(c.cwd);
+    if (rama !== c.rama && lista.includes(c)) { c.rama = rama; guardar(); emitirEstado(c); }
+    return publica(c);
+  }
+
   function manejarEvento(c, e) {
     switch (e.tipo) {
-      case 'sesion':
-        if (e.sessionId && e.sessionId !== c.sessionId) { c.sessionId = e.sessionId; guardar(); emitirEstado(c); }
+      case 'sesion': {
+        let cambio = false;
+        if (e.sessionId && e.sessionId !== c.sessionId) { c.sessionId = e.sessionId; cambio = true; }
+        if (e.modelo && e.modelo !== c.modelo) { c.modelo = e.modelo; cambio = true; }
+        if (cambio) { guardar(); emitirEstado(c); }
         return;
+      }
       case 'permiso': {
         if ((reglas.get(c.id) ?? []).includes(clavePermiso(e.herramienta, e.entrada))) {
           procesos.get(c.id)?.responderPermiso(e.solicitudId, { permitir: true });
@@ -134,21 +184,30 @@ export function crearGestor({
         emitirEstado(c);
         return;
       }
+      case 'denegado': {
+        const d = { id: randomUUID(), herramienta: e.herramienta ?? null, entrada: e.entrada ?? {}, motivo: e.motivo ?? null, ts: ahora() };
+        denegados.set(c.id, [...(denegados.get(c.id) ?? []), d].slice(-MAX_DENEGADOS));
+        emitir({ tipo: 'chat:denegado', conversacion: c.id, ...d });
+        return;
+      }
       case 'texto-parcial':
       case 'mensaje':
         emitir({ ...e, tipo: `chat:${e.tipo}`, conversacion: c.id });
         return;
       case 'fin-turno': {
+        registrarCosto(c, e);
+        if (cerrando.has(c.id)) { guardar(); return; } // el proceso se está cerrando: su último result no cambia el estado
         desarmar('interrupcion', c.id);
         const interrumpido = interrumpidas.delete(c.id);
         pendientes.get(c.id)?.clear();
         if (e.sessionId) c.sessionId = e.sessionId;
         const ok = e.ok || interrumpido;
-        c.estado = ok ? 'lista' : 'error';
+        const encolados = !interrumpido && e.encolados > 0 ? e.encolados : 0;
+        c.estado = !ok ? 'error' : encolados ? 'trabajando' : 'lista'; // con mensajes encolados el proceso sigue trabajando
         c.error = ok ? null : e.error;
         c.ultima = ahora();
         guardar();
-        emitir({ tipo: 'chat:fin-turno', conversacion: c.id, ok: e.ok, error: c.error, costoUSD: e.costoUSD ?? null, interrumpido });
+        emitir({ tipo: 'chat:fin-turno', conversacion: c.id, ok: e.ok, error: c.error, costoUSD: e.costoUSD ?? null, costoTotalUSD: c.costoUSD ?? 0, interrumpido, encolados });
         emitirEstado(c);
         if (c.estado === 'lista') armar('inactividad', c.id, inactividadProcesoMs, () => cerrarProceso(c, 'lista'));
         return;
@@ -160,11 +219,13 @@ export function crearGestor({
         pendientes.delete(c.id);
         interrumpidas.delete(c.id);
         c.pid = null;
+        c.costoPrevio = c.costoUSD ?? 0;
         if (cerrando.delete(c.id)) { c.estado = 'inactiva'; c.error = null; }
         else if (EN_CURSO.has(c.estado) || e.codigo !== 0) { c.estado = 'error'; c.error = e.error ?? 'Claude Code terminó inesperadamente'; }
         else if (c.estado !== 'error') c.estado = 'inactiva';
         guardar();
         emitirEstado(c);
+        enviarPendientes(c);
         return;
       default:
     }
@@ -183,26 +244,33 @@ export function crearGestor({
     if (!procesos.has(c.id) || !EN_CURSO.has(c.estado)) return;
     interrumpidas.delete(c.id);
     pendientes.get(c.id)?.clear();
-    emitir({ tipo: 'chat:fin-turno', conversacion: c.id, ok: false, error: null, costoUSD: null, interrumpido: true });
+    emitir({ tipo: 'chat:fin-turno', conversacion: c.id, ok: false, error: null, costoUSD: null, costoTotalUSD: c.costoUSD ?? 0, interrumpido: true, encolados: 0 });
     cerrarProceso(c);
   }
 
   return {
-    on: (fn) => emisor.on('chat', fn),
+    on: (fn) => { emisor.on('chat', fn); return () => emisor.off('chat', fn); },
     listar: () => [...lista].sort((a, b) => String(b.ultima).localeCompare(String(a.ultima))).map(publica),
     obtener: (id) => publica(buscar(id)),
     pendientesDe: (id) => [...(pendientes.get(buscar(id).id)?.values() ?? [])],
+    denegadosDe: (id) => [...(denegados.get(buscar(id).id) ?? [])],
+    refrescarRama: (id) => refrescar(buscar(id)),
     hayProcesos: () => procesos.size > 0,
 
-    crear({ cwd, modo = 'preguntar' } = {}) {
-      if (!MODOS[modo]) throw new ErrorConversacion(400, `Modo desconocido: ${modo}`);
+    crear({ cwd, modo } = {}) {
+      const m = modo ?? cargarConfig(env).modoPermisoDefecto;
+      if (!MODOS[m]) throw new ErrorConversacion(400, `Modo desconocido: ${m}`);
       let esDir = false;
       try { esDir = !!cwd && statSync(String(cwd)).isDirectory(); } catch { /* no existe */ }
       if (!esDir) throw new ErrorConversacion(400, 'La carpeta no existe o no es un directorio');
-      const c = { id: randomUUID(), sessionId: null, titulo: TITULO_NUEVO, cwd: String(cwd), rama: ramaDe(String(cwd)), modo, creada: ahora(), ultima: ahora(), estado: 'inactiva', pid: null, error: null };
+      const c = {
+        id: randomUUID(), sessionId: null, titulo: TITULO_NUEVO, cwd: String(cwd), rama: null, modo: m, creada: ahora(), ultima: ahora(),
+        estado: 'inactiva', pid: null, error: null, modelo: null, costoUSD: 0, costoPrevio: 0,
+      };
       lista.push(c);
       guardar();
       emitirEstado(c);
+      refrescar(c); // la rama llega después por chat:estado
       return publica(c);
     },
 
@@ -212,7 +280,9 @@ export function crearGestor({
       if (!t) throw new ErrorConversacion(400, 'El mensaje está vacío');
       const max = cargarConfig(env).conversacionesMax;
       if (!EN_CURSO.has(c.estado) && enCurso() >= max) throw new ErrorConversacion(409, `Hay ${enCurso()} conversaciones trabajando; espera o detén una`);
-      const p = asegurarProceso(c);
+      // Si el proceso se está cerrando (inactividad o "Cerrar proceso"), escribirle sería perder el mensaje.
+      const esperaSalida = cerrando.has(c.id) && procesos.has(c.id);
+      const p = esperaSalida ? null : asegurarProceso(c);
       desarmar('inactividad', c.id);
       interrumpidas.delete(c.id);
       if (c.titulo === TITULO_NUEVO) c.titulo = t.length > 60 ? `${t.slice(0, 59)}…` : t;
@@ -220,7 +290,8 @@ export function crearGestor({
       c.error = null;
       c.ultima = ahora();
       emitir({ tipo: 'chat:usuario', conversacion: c.id, id: randomUUID(), texto: t });
-      p.enviar(t);
+      if (esperaSalida) porEnviar.set(c.id, [...(porEnviar.get(c.id) ?? []), t]);
+      else p.enviar(t);
       guardar();
       emitirEstado(c);
     },
