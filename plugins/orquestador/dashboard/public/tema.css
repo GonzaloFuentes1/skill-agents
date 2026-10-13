@@ -42,7 +42,13 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .m-heredado, .m-desconocido { --c: var(--heredado); }
 .e-listo.tenue, span.e-listo, span.e-error, span.e-accion { color: var(--c); }
 .punto { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--cola)); flex: none; display: inline-block; }
-.e-trabajando .punto, .e-accion .punto { animation: pulso-punto 1.4s ease-in-out infinite; }
+.e-accion .punto { animation: pulso-punto 1.4s ease-in-out infinite; }
+/* Ping: un anillo que se expande desde el punto de lo que está trabajando. */
+.e-trabajando .punto { animation: ping 1.6s cubic-bezier(0, 0, .2, 1) infinite; }
+@keyframes ping {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c, var(--activo)) 75%, transparent); }
+  75%, 100% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--c, var(--activo)) 0%, transparent); }
+}
 @keyframes pulso-punto { 50% { opacity: .3; } }
 .estado { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--c); white-space: nowrap; }
 .chip-modelo { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap;
@@ -402,6 +408,7 @@ dialog input, dialog select { min-height: 42px; padding: 0 12px; border-radius: 
   body.pestana-actividad .app, body[data-pestana="agentes"] .app, body[data-pestana="config"] .app { grid-template-columns: 260px minmax(0, 1fr); }
   body.pestana-actividad .agentes, body[data-pestana="agentes"] .agentes, body[data-pestana="config"] .agentes { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .punto, .escribiendo::after { animation: none !important; } }
+/* La casilla Animaciones (por defecto según prefers-reduced-motion) gobierna todo el dashboard. */
+body.sin-animacion .punto, body.sin-animacion .escribiendo::after { animation: none !important; }
 /* El panel lateral de agentes del chat no aplica en Agentes ni en Configuración */
 body[data-pestana="agentes"] #ver-agentes, body[data-pestana="config"] #ver-agentes { display: none; }
