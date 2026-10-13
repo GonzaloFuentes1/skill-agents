@@ -4,7 +4,7 @@ import { segmentar, estadoEtapas } from './plan-vista.js';
 import { renderPlan } from './plan.js';
 
 const CAMPO = { Bash: 'command', PowerShell: 'command', Read: 'file_path', Write: 'file_path', Edit: 'file_path', MultiEdit: 'file_path', Grep: 'pattern', Glob: 'pattern', WebFetch: 'url', WebSearch: 'query' };
-const DECISION = { permitir: 'Permitiste una vez', siempre: 'Permitido siempre en esta conversación', denegar: 'Denegaste' };
+const DECISION = { permitir: 'Permitiste una vez', siempre: 'Permitido siempre en esta conversación', denegar: 'Denegaste', cancelado: 'Solicitud cancelada' };
 
 export function resumenEntrada(nombre, entrada = {}) {
   const v = CAMPO[nombre] && entrada[CAMPO[nombre]] != null ? String(entrada[CAMPO[nombre]]) : JSON.stringify(entrada);
@@ -61,7 +61,8 @@ function renderMensaje(m, ctx) {
   if (m.rol === 'decision') {
     const b = m.bloques[0];
     const texto = b.tipo === 'interrupcion' ? 'Detuviste el turno.' : `${DECISION[b.decision] ?? b.decision}: ${b.herramienta} ${resumenEntrada(b.herramienta, b.entrada)}`;
-    return el('div', `msg decision ${b.decision === 'denegar' ? 'e-error' : 'e-listo'}`, texto);
+    const clase = b.decision === 'denegar' ? 'e-error' : b.decision === 'cancelado' ? 'e-cola' : 'e-listo';
+    return el('div', `msg decision ${clase}`, texto);
   }
   const d = el('div', 'msg asistente');
   d.append(rotuloOrquestador());

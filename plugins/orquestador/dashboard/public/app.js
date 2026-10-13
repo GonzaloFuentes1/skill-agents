@@ -55,6 +55,12 @@ $('tab-chat').addEventListener('click', () => mostrarPestana('chat'));
 $('tab-actividad').addEventListener('click', () => mostrarPestana('actividad'));
 $('menu').addEventListener('click', () => document.body.classList.toggle('lateral-abierto'));
 $('ver-agentes').addEventListener('click', () => document.body.classList.toggle('panel-abierto'));
+// Cajones (≤1180 px): se cierran con el velo, con Escape o con el botón "Cerrar panel".
+const cerrarCajones = () => document.body.classList.remove('lateral-abierto', 'panel-abierto');
+$('velo').addEventListener('click', cerrarCajones);
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && !$('dialogo-nueva').open) cerrarCajones();
+});
 
 // ---------- render ----------
 function renderLista() {
@@ -89,13 +95,18 @@ function renderCabecera() {
   $('modo').disabled = !c;
   $('entrada').disabled = !c;
   $('enviar').disabled = !c;
-  $('detener').hidden = !(c && ['trabajando', 'esperando-permiso'].includes(c.estado));
+  const enCurso = !!c && ['trabajando', 'esperando-permiso'].includes(c.estado);
+  $('detener').hidden = !enCurso;
+  // Libera el proceso de Claude Code de la conversación; el siguiente mensaje lo retoma con --resume.
+  $('cerrar-conv').hidden = !c;
+  $('cerrar-conv').disabled = !c?.pid || enCurso;
 }
 
 function renderPanel() {
   renderAgentes($('panel-agentes'), {
     sesion: sesionActual(), seleccionado: estado.agente, pasos: estado.pasos,
     onSeleccionar: seleccionarAgente, onVolver: () => { estado.agente = null; renderPanel(); },
+    onCerrar: () => document.body.classList.remove('panel-abierto'),
   });
 }
 
@@ -142,13 +153,19 @@ function filaUso(nombre, valor, clase, fraccion) {
   return f;
 }
 
+let firmaUso = null;
 async function actualizarUso() {
   const c = convActual();
-  if (!c?.sessionId) { $('uso').hidden = true; return; }
+  if (!c?.sessionId) { $('uso').hidden = true; firmaUso = null; return; }
   try {
     const d = await api('GET', `/estado?session=${encodeURIComponent(c.sessionId)}`);
     const fable = d.estado?.fableUsados ?? 0;
     const activos = sesionActual()?.stats.activos ?? 0;
+    // Se reconstruye solo si cambió algo: así el botón Mostrar/Ocultar no pierde el foco cada 3 s.
+    const firma = JSON.stringify([c.sessionId, fable, activos, d.config.fableMaxPorSesion, d.config.paraleloMax, d.estado?.costoUSD ?? 0, costoOculto]);
+    if (firma === firmaUso && !$('uso').hidden) return;
+    firmaUso = firma;
+    const teniaFoco = $('uso').contains(document.activeElement);
     const costo = el('div', 'fila');
     costo.append(
       el('span', 'tenue', 'Costo estimado'), el('strong', null, costoOculto ? '••••' : formatoCosto(d.estado?.costoUSD ?? 0)),
@@ -165,6 +182,7 @@ async function actualizarUso() {
       costo,
     );
     $('uso').hidden = false;
+    if (teniaFoco) $('uso').querySelector('button')?.focus();
   } catch { /* sin datos de uso todavía */ }
 }
 
@@ -178,24 +196,32 @@ function seleccionarAgente(id) {
   consultarPasos();
 }
 
+// Una consulta a la vez; si mientras tanto cambió el agente o el punto de lectura, la respuesta se descarta.
+let pasosEnVuelo = false;
 async function consultarPasos() {
+  if (pasosEnVuelo) return;
   const c = convActual();
-  const n = sesionActual()?.nodos[estado.agente];
+  const agente = estado.agente;
+  const desde = estado.desde;
+  const n = sesionActual()?.nodos[agente];
   if (!c || !n?.agentId) return;
+  const terminado = n.estado !== 'activo';
+  pasosEnVuelo = true;
   try {
-    const r = await api('GET', `/api/agentes/${encodeURIComponent(c.sessionId)}/${encodeURIComponent(n.agentId)}/pasos?desde=${estado.desde}`);
-    if (r.siguiente < estado.desde) estado.pasos = [];
+    const r = await api('GET', `/api/agentes/${encodeURIComponent(c.sessionId)}/${encodeURIComponent(n.agentId)}/pasos?desde=${desde}`);
+    if (estado.agente !== agente || estado.desde !== desde) return;
+    if (r.siguiente < desde) estado.pasos = [];
     estado.pasos.push(...r.pasos);
     estado.desde = r.siguiente;
+    if (terminado) estado.consultaFinal = agente; // la lectura posterior al cierre ya está hecha
     renderPanel();
-  } catch { /* se reintenta en el próximo ciclo */ }
+  } catch { /* se reintenta en el próximo ciclo */ } finally { pasosEnVuelo = false; }
 }
 
 setInterval(() => {
   const n = sesionActual()?.nodos[estado.agente];
   if (!n) return;
-  if (n.estado === 'activo') { consultarPasos(); return; }
-  if (estado.consultaFinal !== estado.agente) { estado.consultaFinal = estado.agente; consultarPasos(); } // última lectura al terminar
+  if (n.estado === 'activo' || estado.consultaFinal !== estado.agente) consultarPasos();
 }, 1000);
 
 // ---------- conversaciones ----------
@@ -204,11 +230,14 @@ async function cargarConversaciones() {
   renderLista();
 }
 
-async function abrir(id) {
+// recarga: misma conversación tras reconectar el SSE; se conserva el detalle del agente abierto.
+async function abrir(id, { recarga = false } = {}) {
+  if (!(recarga && id === estado.actual)) {
+    estado.agente = null;
+    estado.pasos = [];
+    estado.desde = 0;
+  }
   estado.actual = id;
-  estado.agente = null;
-  estado.pasos = [];
-  estado.desde = 0;
   guardarPreferencia('orq-conversacion', id);
   renderLista();
   try {
@@ -239,6 +268,7 @@ $('entrada').addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); enviar($('entrada').value); }
 });
 $('detener').addEventListener('click', () => { const c = convActual(); if (c) api('POST', ruta(c, 'interrumpir'), {}).catch((e) => toast(e.message)); });
+$('cerrar-conv').addEventListener('click', () => { const c = convActual(); if (c?.pid) api('POST', ruta(c, 'cerrar'), {}).catch((e) => toast(e.message)); });
 $('modo').addEventListener('change', (ev) => { const c = convActual(); if (c) api('POST', ruta(c, 'modo'), { modo: ev.target.value }).catch((e) => toast(e.message)); });
 
 // ---------- nueva conversación ----------
@@ -280,7 +310,7 @@ function conectar() {
   fuente.addEventListener('open', () => { inicioConexion(); conexion('En vivo', 'ok'); });
   fuente.addEventListener('error', () => { conexion('Reconectando…', 'error'); api('GET', '/api/conversaciones').catch(() => {}); });
   fuente.addEventListener('evento', (m) => { try { procesarEvento(JSON.parse(m.data)); } catch { /* evento inválido */ } });
-  fuente.addEventListener('replay-fin', () => { finReplay(); if (estado.actual) abrir(estado.actual); });
+  fuente.addEventListener('replay-fin', () => { finReplay(); if (estado.actual) abrir(estado.actual, { recarga: true }); });
   fuente.addEventListener('chat', (m) => {
     let e;
     try { e = JSON.parse(m.data); } catch { return; }

@@ -103,3 +103,30 @@ test('resumenEntrada: campo clave por herramienta y JSON recortado para las dem�
   assert.equal(resumenEntrada('X', { a: 1 }), '{"a":1}');
   assert.equal(resumenEntrada('X', { a: 'y'.repeat(500) }).length, 200);
 });
+
+test('chat: estado error con motivo agrega un mensaje de error una sola vez (muerte del proceso)', () => {
+  const c = chatVacio();
+  reducirChat(c, { tipo: 'chat:estado', conv: { estado: 'error', error: 'Claude Code terminó con código 1' } });
+  reducirChat(c, { tipo: 'chat:estado', conv: { estado: 'error', error: 'Claude Code terminó con código 1' } });
+  assert.deepEqual(c.mensajes.map((m) => [m.rol, m.bloques[0].texto]), [['error', 'Claude Code terminó con código 1']]);
+  const d = chatVacio();
+  reducirChat(d, { tipo: 'chat:fin-turno', ok: false, error: 'Límite' });
+  reducirChat(d, { tipo: 'chat:estado', conv: { estado: 'error', error: 'Límite' } });
+  assert.equal(d.mensajes.length, 1);
+  reducirChat(d, { tipo: 'chat:estado', conv: { estado: 'lista', error: null } });
+  assert.equal(d.mensajes.length, 1);
+});
+
+test('desdeHistorial: una conversación en error muestra su error al final', () => {
+  const usuario = { rol: 'usuario', id: 'u', bloques: [{ tipo: 'texto', texto: 'x' }] };
+  const h = desdeHistorial({ conversacion: { estado: 'error', error: 'murió' }, mensajes: [usuario] });
+  assert.deepEqual(h.mensajes.map((m) => m.rol), ['usuario', 'error']);
+  assert.equal(h.mensajes[1].bloques[0].texto, 'murió');
+  assert.equal(desdeHistorial({ conversacion: { estado: 'lista', error: null }, mensajes: [usuario] }).mensajes.length, 1);
+});
+
+test('plan: el modelo se acepta por familia y la meta admite ·, : o - tras E#', () => {
+  const con = (modelo) => validarPlan({ ...PLAN, etapas: [{ ...PLAN.etapas[0], agentes: [{ tipo: 'a', modelo }] }] }).ok;
+  assert.deepEqual([con('claude-opus-5-5'), con('inherit'), con('Haiku'), con('gpt-5'), con('')], [true, true, true, false, false]);
+  assert.deepEqual(['E1 · a', 'E2: b', 'E3 - c', 'E4-d', 'E5 c', 'Etapa'].map(etapaDeMeta), ['E1', 'E2', 'E3', 'E4', null, null]);
+});

@@ -3,11 +3,21 @@ const mismoBloque = (a, b) => a.tipo === b.tipo && (a.tipo === 'herramienta' ? a
 
 export const chatVacio = () => ({ mensajes: [], parcial: '', permisos: [], estado: 'inactiva', error: null });
 
+// Una conversación en error (p. ej. el proceso murió) muestra su motivo al final, con "Retomar", una sola vez.
+function anotarError(chat) {
+  if (chat.estado !== 'error' || !chat.error) return;
+  const ultimo = chat.mensajes.at(-1);
+  if (ultimo?.rol === 'error' && ultimo.bloques[0]?.texto === chat.error) return;
+  chat.mensajes.push({ rol: 'error', id: `e${chat.mensajes.length}`, bloques: [{ tipo: 'texto', texto: chat.error }] });
+}
+
 export function desdeHistorial({ conversacion, mensajes = [], permisos = [] } = {}) {
-  return {
+  const chat = {
     mensajes: mensajes.map((m) => ({ ...m, bloques: m.bloques.map((b) => ({ ...b })) })),
     parcial: '', permisos: [...permisos], estado: conversacion?.estado ?? 'inactiva', error: conversacion?.error ?? null,
   };
+  anotarError(chat);
+  return chat;
 }
 
 function herramientaPorId(chat, usoId) {
@@ -55,6 +65,7 @@ export function reducirChat(chat, e) {
       chat.estado = e.conv?.estado ?? chat.estado;
       chat.error = e.conv?.error ?? null;
       if (chat.estado !== 'esperando-permiso' && chat.estado !== 'trabajando') chat.permisos = [];
+      anotarError(chat);
       break;
     default:
   }

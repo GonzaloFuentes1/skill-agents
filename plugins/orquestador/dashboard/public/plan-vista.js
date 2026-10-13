@@ -1,5 +1,6 @@
 // Planes en pipeline: extracción y validación del bloque ```orquestador-plan y estado de cada etapa.
-const FAMILIAS = new Set(['haiku', 'sonnet', 'opus', 'fable', 'heredado']);
+import { familiaModelo } from './dom.js';
+
 const BLOQUE = /```orquestador-plan[^\n]*\n([\s\S]*?)```/g;
 const esTexto = (x, max = 400) => typeof x === 'string' && x.trim().length > 0 && x.length <= max;
 
@@ -14,7 +15,7 @@ export function validarPlan(p) {
     ids.add(e.id);
     if (!esTexto(e.titulo, 80) || !esTexto(e.meta)) return { ok: false, error: `${donde}: falta título o meta` };
     if (!Array.isArray(e.agentes) || !e.agentes.length) return { ok: false, error: `${donde}: sin agentes` };
-    for (const a of e.agentes) if (!esTexto(a?.tipo, 80) || !FAMILIAS.has(String(a?.modelo ?? '').toLowerCase())) return { ok: false, error: `${donde}: agente inválido` };
+    for (const a of e.agentes) if (!esTexto(a?.tipo, 80) || familiaModelo(a?.modelo) === 'desconocido') return { ok: false, error: `${donde}: agente inválido` };
     if (e.barrera != null && (!['auto', 'humana'].includes(e.barrera?.tipo) || !esTexto(e.barrera?.criterio))) return { ok: false, error: `${donde}: barrera inválida` };
   }
   if (p.riesgos != null && (!Array.isArray(p.riesgos) || p.riesgos.some((r) => !esTexto(r?.titulo) || !esTexto(r?.planB)))) return { ok: false, error: 'riesgos inválidos' };
@@ -36,7 +37,7 @@ export function segmentar(texto) {
   return out.filter((s) => s.tipo !== 'texto' || s.texto.trim());
 }
 
-export const etapaDeMeta = (meta) => /^\s*(E\d{1,2})\s*·/.exec(String(meta ?? ''))?.[1] ?? null;
+export const etapaDeMeta = (meta) => /^\s*(E\d{1,2})\s*[·:-]/.exec(String(meta ?? ''))?.[1] ?? null;
 
 export function estadoEtapas(plan, nodos = []) {
   const estados = {};

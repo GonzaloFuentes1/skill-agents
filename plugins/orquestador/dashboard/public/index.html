@@ -34,6 +34,7 @@
           <option value="auto">Auto</option>
         </select>
       </label>
+      <button id="cerrar-conv" class="boton-secundario" type="button" title="Libera el proceso de Claude Code; el próximo mensaje lo retoma" hidden>Cerrar proceso</button>
       <button id="ver-agentes" class="solo-movil" type="button" aria-label="Agentes">◎</button>
       <button id="tema" type="button" aria-label="Cambiar entre tema oscuro y claro">◐</button>
       <span id="conexion" class="conexion">Conectando…</span>
@@ -91,6 +92,7 @@
 
   <aside id="panel-agentes" class="agentes" aria-label="Agentes"></aside>
 </div>
+<div id="velo" class="velo" aria-hidden="true"></div>
 
 <dialog id="dialogo-nueva" aria-labelledby="titulo-nueva">
   <form id="form-nueva" method="dialog">

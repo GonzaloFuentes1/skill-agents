@@ -54,13 +54,15 @@ function detalle(n, pasos, onVolver) {
   return d;
 }
 
-export function renderAgentes(contenedor, { sesion, seleccionado, pasos = [], onSeleccionar, onVolver }) {
-  if (seleccionado && sesion?.nodos[seleccionado]) { contenedor.replaceChildren(detalle(sesion.nodos[seleccionado], pasos, onVolver)); return; }
+export function renderAgentes(contenedor, { sesion, seleccionado, pasos = [], onSeleccionar, onVolver, onCerrar }) {
+  // Solo se ve en modo cajón (≤1180 px; ver tema.css).
+  const cerrar = onCerrar ? [boton('Cerrar panel', 'cerrar-cajon boton-secundario', onCerrar, 'Cerrar el panel de agentes')] : [];
+  if (seleccionado && sesion?.nodos[seleccionado]) { contenedor.replaceChildren(...cerrar, detalle(sesion.nodos[seleccionado], pasos, onVolver)); return; }
   const nodos = sesion ? sesion.ordenNodos.map((id) => sesion.nodos[id]) : [];
   const activos = nodos.filter((n) => n.estado === 'activo').length;
   const cab = el('div', 'agentes-cab');
   cab.append(el('h2', 'serif', 'Agentes'), el('span', 'tenue', nodos.length ? `${activos} activos · ${nodos.length - activos} terminados` : ''));
-  const hijos = [cab];
+  const hijos = [...cerrar, cab];
   if (!nodos.length) hijos.push(el('p', 'tenue', 'Cuando el orquestador delegue, sus agentes aparecen aquí.'));
   for (const n of [...nodos].reverse()) {
     const t = boton(null, `tarjeta-agente e-${claseEstado(n)}`, () => onSeleccionar(n.id));

@@ -89,7 +89,7 @@ test('frontend: estructura, módulos y sin innerHTML ni recursos externos', asyn
     const html = (await get(base, '/')).texto;
     for (const id of ['escenario', 'lineas', 'nodos', 'tarjetas', 'centro', 'centro-modelo', 'sesion', 'seguir', 'animaciones', 'conexion', 'stats', 'timeline', 'toast', 'demo', 'vacio',
       'conversaciones', 'nueva', 'uso', 'titulo', 'subtitulo', 'tab-chat', 'tab-actividad', 'vista-chat', 'vista-actividad', 'mensajes', 'composer', 'entrada', 'enviar', 'detener',
-      'modo', 'tema', 'panel-agentes', 'menu', 'ver-agentes', 'dialogo-nueva', 'form-nueva', 'carpeta', 'carpetas', 'modo-nueva', 'cancelar-nueva', 'error-nueva']) {
+      'modo', 'tema', 'panel-agentes', 'menu', 'ver-agentes', 'cerrar-conv', 'velo', 'dialogo-nueva', 'form-nueva', 'carpeta', 'carpetas', 'modo-nueva', 'cancelar-nueva', 'error-nueva']) {
       assert.match(html, new RegExp(`id="${id}"`), `falta #${id}`);
     }
     assert.match(html, /<script type="module" src="\.\/app\.js"><\/script>/);
