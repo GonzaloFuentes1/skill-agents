@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -91,4 +91,17 @@ test('session-start en un proceso auxiliar (ORQUESTADOR_CANAL vacío) no emite s
   const env = { ORQUESTADOR_HOME: mkdtempSync(join(tmpdir(), 'orq-aux-')), ORQUESTADOR_CANAL: '' };
   assert.equal(manejarInicio({ session_id: 'aux' }, env, '/raiz'), null);
   assert.deepEqual(leerEventos({ session: 'aux' }, env), []);
+});
+
+test('un claude .cmd con espacios en la ruta recibe los argumentos intactos (spawn real con shell)', { skip: process.platform !== 'win32' }, async () => {
+  const { env, dir, leer } = entornoCli();
+  const carpeta = join(dir, 'Mi Carpeta ñ');
+  mkdirSync(carpeta);
+  const cmd = join(carpeta, 'claude falso.cmd');
+  writeFileSync(cmd, `@echo off\r\n"${process.execPath}" "${FALSO_CLI}" %*\r\n`);
+  const args = ['-p', '--tools', '', '--json-schema', '{"a":"b c"}', 'texto con espacios'];
+  const r = await ejecutarClaude(args, { env, binario: cmd, entrada: 'Nombre: X' });
+  assert.equal(r.codigo, 0, r.stderr);
+  const [inv] = leer();
+  assert.deepEqual(inv.argv, args);
 });
