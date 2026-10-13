@@ -60,8 +60,9 @@ test('normalizador: permission_denied con nombres alternativos y result con queu
   assert.equal(n({ type: 'result', subtype: 'success' })[0].encolados, 0);
 });
 
-test('proceso: responderPermiso con un id desconocido o ya respondido no envía nada', async () => {
+test('proceso: responderPermiso con un id desconocido o ya respondido no envía nada', async (t) => {
   const { p, hasta, leerRegistro } = proceso([ESPERAR_USUARIO, INIT, permiso('r1', 'ls'), ESPERAR_RESPUESTA, fin()]);
+  t.after(() => p.cerrar());
   p.enviar('x');
   await hasta((e) => e.tipo === 'permiso');
   assert.equal(p.responderPermiso('inventado', { permitir: true }), false);
@@ -73,16 +74,18 @@ test('proceso: responderPermiso con un id desconocido o ya respondido no envía 
   await hasta((e) => e.tipo === 'salida');
 });
 
-test('proceso: la última línea sin salto final se procesa al cerrar', async () => {
+test('proceso: la última línea sin salto final se procesa al cerrar', async (t) => {
   const { p, hasta } = proceso([ESPERAR_USUARIO, INIT, { emitirSinSalto: fin().emitir }, { salir: 0 }]);
+  t.after(() => p.cerrar());
   p.enviar('x');
   await hasta((e) => e.tipo === 'salida');
   await hasta((e) => e.tipo === 'fin-turno', 200);
 });
 
-test('costo: total_cost_usd es acumulado por proceso y, al terminar el proceso, se suma al de la conversación', async () => {
+test('costo: total_cost_usd es acumulado por proceso y, al terminar el proceso, se suma al de la conversación', async (t) => {
   const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, fin({ total_cost_usd: 0.00336 }), ESPERAR_USUARIO, INIT, fin({ total_cost_usd: 0.0037 })]);
   const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
   const { eventos, hasta } = recolector(g);
   const c = g.crear({ cwd: home });
   const fines = () => eventos.filter((e) => e.tipo === 'chat:fin-turno');
@@ -102,9 +105,10 @@ test('costo: total_cost_usd es acumulado por proceso y, al terminar el proceso, 
   assert.ok(Math.abs(crearGestor({ env, spawnFn }).obtener(c.id).costoUSD - 0.00706) < 1e-12);
 });
 
-test('encolados: un result con queued_turn_count > 0 deja la conversación trabajando', async () => {
+test('encolados: un result con queued_turn_count > 0 deja la conversación trabajando', async (t) => {
   const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, fin({ queued_turn_count: 1 }), fin()]);
   const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
   const { eventos, hasta } = recolector(g);
   const c = g.crear({ cwd: home });
   g.enviar(c.id, 'x');
@@ -116,9 +120,10 @@ test('encolados: un result con queued_turn_count > 0 deja la conversación traba
   await g.apagar();
 });
 
-test('denegado: emite chat:denegado y queda disponible en denegadosDe', async () => {
+test('denegado: emite chat:denegado y queda disponible en denegadosDe', async (t) => {
   const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, denegado('Bash', 'git push --force', 'Git destructivo'), fin()]);
   const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
   const { hasta } = recolector(g);
   const c = g.crear({ cwd: home });
   g.enviar(c.id, 'x');
@@ -128,9 +133,10 @@ test('denegado: emite chat:denegado y queda disponible en denegadosDe', async ()
   await g.apagar();
 });
 
-test('modelo del orquestador: se guarda desde el evento sesion', async () => {
+test('modelo del orquestador: se guarda desde el evento sesion', async (t) => {
   const { env, spawnFn, home } = entorno(turnoSimple());
   const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
   const { hasta } = recolector(g);
   const c = g.crear({ cwd: home });
   g.enviar(c.id, 'x');
@@ -139,9 +145,10 @@ test('modelo del orquestador: se guarda desde el evento sesion', async () => {
   await g.apagar();
 });
 
-test('enviar mientras el proceso se cierra: espera la salida y abre uno nuevo con --resume', async () => {
+test('enviar mientras el proceso se cierra: espera la salida y abre uno nuevo con --resume', async (t) => {
   const { env, spawnFn, home, leerRegistro } = entorno(turnoSimple());
   const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
   const { eventos, hasta } = recolector(g);
   const c = g.crear({ cwd: home });
   g.enviar(c.id, 'uno');
@@ -156,9 +163,10 @@ test('enviar mientras el proceso se cierra: espera la salida y abre uno nuevo co
   await g.apagar();
 });
 
-test('un fin-turno que llega mientras el proceso se cierra se ignora', async () => {
+test('un fin-turno que llega mientras el proceso se cierra se ignora', async (t) => {
   const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, ESPERAR_PEDIDO, finInterrumpido]);
   const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
   const { eventos, hasta } = recolector(g);
   const c = g.crear({ cwd: home });
   g.enviar(c.id, 'x');
@@ -186,11 +194,12 @@ test('crear sin modo usa modoPermisoDefecto de la config', () => {
   assert.equal(crearGestor({ env, spawnFn }).crear({ cwd: home }).modo, 'auto');
 });
 
-test('rama: se calcula en segundo plano al crear y se refresca al pedirla', { skip: !hayGit && 'git no está instalado' }, async () => {
+test('rama: se calcula en segundo plano al crear y se refresca al pedirla', { skip: !hayGit && 'git no está instalado' }, async (t) => {
   const { env, spawnFn, home } = entorno(turnoSimple());
   execFileSync('git', ['init', '-q', home]);
   execFileSync('git', ['-C', home, 'checkout', '-q', '-b', 'feat/prueba']);
   const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
   const { hasta } = recolector(g);
   const c = g.crear({ cwd: home });
   assert.equal(c.rama, null);
@@ -200,9 +209,10 @@ test('rama: se calcula en segundo plano al crear y se refresca al pedirla', { sk
   assert.equal((await g.refrescarRama(c.id)).rama, 'fix/otra');
 });
 
-test('on devuelve una función que quita el oyente', async () => {
+test('on devuelve una función que quita el oyente', async (t) => {
   const { env, spawnFn, home } = entorno(turnoSimple());
   const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
   let n = 0;
   const quitar = g.on(() => { n += 1; });
   g.crear({ cwd: home });
@@ -211,4 +221,41 @@ test('on devuelve una función que quita el oyente', async () => {
   g.crear({ cwd: home });
   assert.ok(antes > 0);
   assert.equal(n, antes);
+});
+
+const esperarMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('cerrar, enviar y apagar: el mensaje que esperaba no abre un proceso nuevo', async (t) => {
+  const { env, spawnFn, home, leerRegistro } = entorno(turnoSimple());
+  const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'uno');
+  await hasta((e) => e.tipo === 'chat:fin-turno');
+  g.cerrar(c.id);
+  g.enviar(c.id, 'dos'); // queda esperando la salida
+  await g.apagar();
+  await esperarMs(300);
+  assert.equal(leerRegistro().filter((r) => r.argv).length, 1);
+  assert.equal(g.hayProcesos(), false);
+  assert.equal(g.obtener(c.id).estado, 'inactiva');
+});
+
+test('cerrar, enviar e interrumpir: Detener descarta el mensaje que esperaba', async (t) => {
+  const { env, spawnFn, home, leerRegistro } = entorno(turnoSimple());
+  const g = crearGestor({ env, spawnFn });
+  t.after(() => g.apagar());
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'uno');
+  await hasta((e) => e.tipo === 'chat:fin-turno');
+  g.cerrar(c.id);
+  g.enviar(c.id, 'dos');
+  g.interrumpir(c.id);
+  await hasta((e) => e.tipo === 'chat:estado' && e.conv.estado === 'inactiva' && e.conv.pid === null);
+  await esperarMs(300);
+  assert.equal(leerRegistro().filter((r) => r.argv).length, 1);
+  assert.equal(g.hayProcesos(), false);
+  assert.equal(g.obtener(c.id).estado, 'inactiva');
 });

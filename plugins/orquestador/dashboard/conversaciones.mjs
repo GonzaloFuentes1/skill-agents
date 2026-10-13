@@ -76,6 +76,7 @@ export function crearGestor({
   const porEnviar = new Map(); // id → textos que llegaron mientras el proceso se cerraba
   const denegados = new Map(); // id → últimas denegaciones del modo automático (solo en memoria)
   const temporizadores = { inactividad: new Map(), interrupcion: new Map() };
+  let apagando = false; // tras apagar() no se abre ningún proceso nuevo
   const emisor = new EventEmitter();
   emisor.setMaxListeners(0);
 
@@ -130,8 +131,8 @@ export function crearGestor({
   // Tras la salida de un proceso que se cerraba, los mensajes que esperaban abren uno nuevo con --resume.
   function enviarPendientes(c) {
     const textos = porEnviar.get(c.id);
-    if (!textos?.length) return;
     porEnviar.delete(c.id);
+    if (apagando || !textos?.length) return;
     try {
       const p = asegurarProceso(c);
       c.estado = 'trabajando';
@@ -332,6 +333,7 @@ export function crearGestor({
 
     interrumpir(id) {
       const c = buscar(id);
+      porEnviar.delete(c.id); // "Detener" descarta los mensajes que esperaban la salida del proceso
       const p = procesos.get(c.id);
       if (!p) return;
       if (EN_CURSO.has(c.estado)) {
@@ -343,11 +345,14 @@ export function crearGestor({
 
     cerrar(id) {
       const c = buscar(id);
+      porEnviar.delete(c.id);
       const p = procesos.get(c.id);
       if (p) { cerrando.add(c.id); p.cerrar(); }
     },
 
     async apagar(ms = 3500) {
+      apagando = true;
+      porEnviar.clear();
       const vivos = [...procesos.entries()];
       if (!vivos.length) return;
       await Promise.race([
