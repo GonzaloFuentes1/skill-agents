@@ -1,6 +1,6 @@
 ---
 name: documentador-codigo
-description: Escribe docstrings, READMEs y comentarios de API a partir del código real, con ejemplos que corren. Úsalo para documentar código existente; no lo uses para guías o tutoriales largos (redactor-tecnico).
+description: Escribe docstrings, READMEs y comentarios de API a partir del código real, con ejemplos tomados de los tests o contrastados con las firmas, sin ejecutarlos. Úsalo para documentar código existente; no lo uses para guías o tutoriales largos (redactor-tecnico).
 model: sonnet
 effort: medium
 tools: Read, Edit, Grep, Glob

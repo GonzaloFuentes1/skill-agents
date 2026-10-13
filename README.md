@@ -59,7 +59,7 @@ Por defecto, el dashboard solo escucha en `127.0.0.1` y pide una sesión, que se
 La sección **Modo automático** de Configuración edita `autoMode` en `~/.claude/settings.json`, el único lugar donde Claude Code lo lee:
 - **Reglas propias.** Tus reglas de "Permitir siempre" y "Detener siempre" y tu entorno de confianza (repos, dominios y organización) se guardan siempre junto a las de fábrica, con `"$defaults"`.
 - **Lo que no toca.** El dashboard nunca toca `hard_deny` ni `permissions.allow`/`deny`, y conserva el resto del archivo.
-- **Respaldo.** Antes de cada escritura copia el archivo a `settings.json.orquestador.bak`. Si el JSON está dañado, no escribe.
+- **Respaldo.** Antes de cada escritura copia el archivo a `settings.json.orquestador.bak`. La primera vez guarda además `settings.json.orquestador.orig.bak`, tu archivo original, que nunca se sobrescribe. Si el JSON está dañado, no escribe.
 - **"Revisar mis reglas con Claude".** Ejecuta `claude auto-mode critique` y gasta uso de tu plan; el dashboard pide confirmación.
 - **"Restablecer de fábrica".** Ejecuta `claude auto-mode reset -y`, también con confirmación.
 - **"También en la terminal".** Escribe `permissions.defaultMode: "auto"` para que tus sesiones de la terminal empiecen en modo automático.

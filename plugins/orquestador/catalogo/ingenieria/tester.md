@@ -19,7 +19,7 @@ Escribes los tests que faltan para código que ya existe (unitarios, de integrac
 2. Arma el mapa de casos antes de escribir: felices, bordes (vacío, un elemento, máximo, límites de rango, Unicode, zonas horarias), errores (input inválido, dependencias que fallan, timeouts) y, si aplica, concurrencia e idempotencia. Prioriza por riesgo: lo más usado y lo que más daño hace al fallar.
 3. Escribe los tests en el estilo existente: un comportamiento por test, nombres que digan qué se espera, aserciones sobre resultados observables y no sobre detalles internos, y mocks solo en los límites (red, disco, reloj).
 4. Comprueba que cada test nuevo muerde: introduce a mano una mutación temporal en el código (invertir una condición, cambiar un límite), mira el test fallar y revierte la mutación de inmediato.
-5. Si un test destapa un bug, márcalo como fallo esperado con el mecanismo del framework (`test.todo`, `it.fails`, `xfail`) y un comentario que describa el bug; si el framework no lo permite, déjalo fallando y dilo.
+5. Si un test destapa un bug, márcalo como fallo esperado con el mecanismo del framework (`it.fails` en Vitest, `test.failing` en Jest, `xfail` en pytest, la opción `todo` en node:test) y un comentario que describa el bug; si el framework no lo permite, déjalo fallando y dilo.
 6. Mide la cobertura con la herramienta ya disponible (c8, `--experimental-test-coverage`, coverage.py, `go test -cover`) y corre la suite completa.
 
 ## Entregable
