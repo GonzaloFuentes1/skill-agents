@@ -18,7 +18,8 @@ export function resumenEntrada(nombre, entrada) {
 }
 
 // Tarjeta de una acción que el modo automático detuvo. "Autorizar y reintentar" envía la intención explícita del usuario,
-// que según la documentación de Claude Code anula un soft_deny.
+// que según la documentación de Claude Code anula un soft_deny. Solo lo ofrecen las denegaciones que llegan en vivo:
+// las antiguas (al cargar o recargar la página) son un registro informativo.
 export function modeloDenegacion(b, alBloquear) {
   const herramienta = b?.herramienta || 'una acción';
   const resumen = resumenEntrada(b?.herramienta, b?.entrada);
@@ -26,7 +27,9 @@ export function modeloDenegacion(b, alBloquear) {
     titulo: `El modo automático detuvo ${herramienta}`,
     motivo: b?.motivo || 'El clasificador la consideró riesgosa.',
     resumen,
-    accion: alBloquear === 'denegar' ? null : { texto: 'Autorizar y reintentar', mensaje: `Autorizo explícitamente esta acción: ${herramienta} ${resumen}. Hazla.` },
+    accion: b?.antigua || alBloquear === 'denegar' ? null : { texto: 'Autorizar y reintentar', mensaje: `Autorizo explícitamente esta acción: ${herramienta} ${resumen}. Hazla.` },
+    nota: b?.antigua ? 'Registro de una acción detenida antes; no se puede reintentar desde aquí.'
+      : alBloquear === 'denegar' ? 'Según tu configuración, el orquestador busca otra vía sin preguntarte.' : null,
   };
 }
 
@@ -128,7 +131,7 @@ function tarjetaDenegacion(b, ctx) {
   p.append(document.createTextNode('El modo automático detuvo '), el('strong', null, b?.herramienta || 'una acción'), document.createTextNode(`: ${m.motivo}`));
   s.append(el('span', 'versalita', 'Modo automático'), p, el('code', 'bloque-codigo', m.resumen));
   if (m.accion) s.append(boton(m.accion.texto, 'boton-secundario', () => ctx.reintentar?.(m.accion.mensaje)));
-  else s.append(el('span', 'tenue', 'Según tu configuración, el orquestador busca otra vía sin preguntarte.'));
+  else if (m.nota) s.append(el('span', 'tenue', m.nota));
   return s;
 }
 

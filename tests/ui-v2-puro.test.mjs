@@ -234,14 +234,29 @@ test('precios: un campo vacío no se guarda como 0; se ignora y queda el valor g
   assert.equal(f.actual.precios.opus.salida, 0, 'un 0 escrito a propósito sí se guarda');
 });
 
-test('chat: una denegación que viene del historial queda igual que una nueva, con "Autorizar y reintentar"', () => {
+test('chat: las denegaciones al cargar o recargar son solo registro; el botón queda para las que llegan en vivo', () => {
   const d = { id: 'd1', herramienta: 'Bash', entrada: { command: 'git push --force' }, motivo: 'Git destructivo', ts: '2026-10-13T10:00:00Z' };
+  // En vivo (SSE con la página abierta): con "preguntar" o sin configurar, ofrece "Autorizar y reintentar".
   const nueva = reducirChat(chatVacio(), { tipo: 'chat:denegado', conversacion: 'c1', ...d });
-  // El servidor podría mandar otros campos (incluso un "tipo" propio): no deben pisar el tipo del evento.
-  const historial = desdeHistorial({ conversacion: { estado: 'lista' }, mensajes: [], denegados: [{ ...d, tipo: 'denegado' }] });
-  assert.deepEqual(historial.mensajes, nueva.mensajes);
+  assert.equal(nueva.mensajes[0].bloques[0].antigua, undefined);
   for (const alBloquear of ['preguntar', undefined]) {
-    assert.equal(modeloDenegacion(historial.mensajes[0].bloques[0], alBloquear).accion?.texto, 'Autorizar y reintentar');
+    assert.equal(modeloDenegacion(nueva.mensajes[0].bloques[0], alBloquear).accion?.texto, 'Autorizar y reintentar');
   }
-  assert.equal(modeloDenegacion(historial.mensajes[0].bloques[0], 'denegar').accion, null);
+  // Del historial o de la memoria del servidor: antigua, sin botón y con una nota de registro, elija lo que elija alBloquear.
+  // Un "tipo" propio del servidor no pisa el del evento.
+  const historial = desdeHistorial({ conversacion: { estado: 'lista' }, mensajes: [], denegados: [{ ...d, tipo: 'denegado' }] });
+  assert.deepEqual(historial.mensajes.map((m) => [m.rol, m.id]), [['denegado', 'd1']]);
+  const b = historial.mensajes[0].bloques[0];
+  assert.equal(b.antigua, true);
+  for (const alBloquear of ['preguntar', undefined, 'denegar']) {
+    const m = modeloDenegacion(b, alBloquear);
+    assert.equal(m.accion, null, String(alBloquear));
+    assert.equal(m.nota, 'Registro de una acción detenida antes; no se puede reintentar desde aquí.');
+  }
+  // La misma denegación que vuelve a llegar en vivo no duplica la tarjeta ni le devuelve el botón.
+  reducirChat(historial, { tipo: 'chat:denegado', conversacion: 'c1', ...d });
+  assert.equal(historial.mensajes.length, 1);
+  assert.equal(modeloDenegacion(historial.mensajes[0].bloques[0], 'preguntar').accion, null);
+  // Con "denegar", una nueva tampoco tiene botón y explica que se busca otra vía.
+  assert.match(modeloDenegacion(nueva.mensajes[0].bloques[0], 'denegar').nota, /busca otra vía/);
 });

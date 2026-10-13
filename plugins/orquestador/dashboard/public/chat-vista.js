@@ -16,8 +16,9 @@ export function desdeHistorial({ conversacion, mensajes = [], permisos = [], den
     mensajes: mensajes.map((m) => ({ ...m, bloques: m.bloques.map((b) => ({ ...b })) })),
     parcial: '', permisos: [...permisos], estado: conversacion?.estado ?? 'inactiva', error: conversacion?.error ?? null,
   };
-  // Mismo camino que una denegación nueva (tarjeta con "Autorizar y reintentar"); el tipo va al final para que ningún campo lo pise.
-  for (const d of denegados) reducirChat(chat, { ...d, tipo: 'chat:denegado' });
+  // Las denegaciones que llegan al cargar o recargar (historial o memoria del servidor) son antiguas: solo registro, sin
+  // "Autorizar y reintentar". El tipo y la marca van al final para que ningún campo del servidor los pise.
+  for (const d of denegados) reducirChat(chat, { ...d, tipo: 'chat:denegado', antigua: true });
   anotarError(chat);
   return chat;
 }
@@ -60,7 +61,9 @@ export function reducirChat(chat, e) {
       break;
     case 'chat:denegado':
       if (!chat.mensajes.some((m) => m.id === e.id)) {
-        chat.mensajes.push({ rol: 'denegado', id: e.id, bloques: [{ tipo: 'denegado', herramienta: e.herramienta ?? null, entrada: e.entrada ?? {}, motivo: e.motivo ?? null }] });
+        const b = { tipo: 'denegado', herramienta: e.herramienta ?? null, entrada: e.entrada ?? {}, motivo: e.motivo ?? null };
+        if (e.antigua === true) b.antigua = true; // solo la fija desdeHistorial; las que llegan en vivo por SSE ofrecen reintentar
+        chat.mensajes.push({ rol: 'denegado', id: e.id, bloques: [b] });
       }
       break;
     case 'chat:fin-turno':
