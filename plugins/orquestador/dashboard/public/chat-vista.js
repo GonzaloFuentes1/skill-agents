@@ -1,4 +1,6 @@
 // Estado del chat de una conversación: reductor puro (sin DOM). Lo usan chat.js y los tests.
+import { bloquesUsuario } from './adjuntos.js';
+
 const mismoBloque = (a, b) => a.tipo === b.tipo && (a.tipo === 'herramienta' ? a.usoId === b.usoId : a.texto === b.texto);
 
 export const chatVacio = () => ({ mensajes: [], parcial: '', permisos: [], estado: 'inactiva', error: null });
@@ -13,7 +15,8 @@ function anotarError(chat) {
 
 export function desdeHistorial({ conversacion, mensajes = [], permisos = [], denegados = [] } = {}) {
   const chat = {
-    mensajes: mensajes.map((m) => ({ ...m, bloques: m.bloques.map((b) => ({ ...b })) })),
+    // Del usuario: texto sin el pie [Adjuntos] y una ficha por adjunto.
+    mensajes: mensajes.map((m) => ({ ...m, bloques: m.rol === 'usuario' ? bloquesUsuario(m.bloques) : m.bloques.map((b) => ({ ...b })) })),
     parcial: '', permisos: [...permisos], estado: conversacion?.estado ?? 'inactiva', error: conversacion?.error ?? null,
   };
   // Las denegaciones que llegan al cargar o recargar (historial o memoria del servidor) son antiguas: solo registro, sin
@@ -34,7 +37,7 @@ function herramientaPorId(chat, usoId) {
 export function reducirChat(chat, e) {
   switch (e?.tipo) {
     case 'chat:usuario':
-      chat.mensajes.push({ rol: 'usuario', id: e.id, bloques: [{ tipo: 'texto', texto: e.texto }] });
+      chat.mensajes.push({ rol: 'usuario', id: e.id, bloques: bloquesUsuario([{ tipo: 'texto', texto: e.texto }]) });
       break;
     case 'chat:texto-parcial':
       chat.parcial += e.delta ?? '';

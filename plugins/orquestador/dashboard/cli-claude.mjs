@@ -3,22 +3,16 @@ import { spawn as spawnNodo } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { tmpdir } from 'node:os';
 import { cargarConfig } from '../scripts/lib/config.mjs';
-import { resolverBinario, invocacion } from './proceso-claude.mjs';
+import { resolverBinario, invocacion, citarParaShell } from './proceso-claude.mjs';
 import { ErrorConversacion } from './conversaciones.mjs';
+
+export { citarParaShell };
 
 // El hijo no debe creerse anidado (CLAUDECODE) ni recibir las instrucciones del canal dashboard.
 export function entornoAuxiliar(env = process.env) {
   const e = { ...env, ORQUESTADOR_CANAL: '' };
   delete e.CLAUDECODE;
   return e;
-}
-
-// Un .cmd corre a través de cmd.exe, que no cita nada: sin esto, `--tools ""` desaparece y un JSON con comillas se rompe.
-// Reglas de citado de MSVCRT: las comillas internas se escapan con \ y las barras que preceden a una comilla se duplican.
-export function citarParaShell(arg) {
-  const s = String(arg);
-  if (s && !/[\s"^&|<>()%!]/.test(s)) return s;
-  return `"${s.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"`;
 }
 
 export function ejecutarClaude(args, { env = process.env, entrada = null, timeoutMs = 30_000, spawnFn = spawnNodo, binario, cwd = tmpdir() } = {}) {

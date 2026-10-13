@@ -3,6 +3,7 @@ import { el, boton, chipModelo, nombreAgente, claseEstado, textoEstado } from '.
 import { segmentar, estadoEtapas, barreraHumana } from './plan-vista.js';
 import { renderPlan } from './plan.js';
 import { renderMarkdown } from './markdown.js';
+import { fichasMensaje } from './adjuntos.js';
 
 const CAMPO = { Bash: 'command', PowerShell: 'command', Read: 'file_path', Write: 'file_path', Edit: 'file_path', MultiEdit: 'file_path', Grep: 'pattern', Glob: 'pattern', WebFetch: 'url', WebSearch: 'query' };
 const DECISION = { permitir: 'Permitiste una vez', siempre: 'Permitido siempre en esta conversación', denegar: 'Denegaste', cancelado: 'Solicitud cancelada' };
@@ -119,7 +120,11 @@ function renderMensaje(m, ctx) {
   }
   if (m.rol === 'usuario') {
     const d = el('div', 'msg usuario');
-    d.append(el('span', 'versalita tenue', ctx.nombreUsuario), el('div', 'burbuja', m.bloques.map((b) => b.texto).join('\n')));
+    d.append(el('span', 'versalita tenue', ctx.nombreUsuario));
+    const texto = m.bloques.filter((b) => b.tipo === 'texto').map((b) => b.texto).join('\n');
+    if (texto.trim()) d.append(el('div', 'burbuja', texto));
+    const adjuntos = m.bloques.filter((b) => b.tipo === 'adjunto');
+    if (adjuntos.length) d.append(fichasMensaje(adjuntos));
     return d;
   }
   if (m.rol === 'error') {

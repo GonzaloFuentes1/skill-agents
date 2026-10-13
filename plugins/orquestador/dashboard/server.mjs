@@ -12,6 +12,7 @@ import { leerEstado } from '../scripts/lib/estado.mjs';
 import { esPrincipal } from '../scripts/lib/hook-io.mjs';
 import { crearSeguidor, parsearLineas, listarSesiones } from './datos.mjs';
 import { crearGestor, ErrorConversacion } from './conversaciones.mjs';
+import { MAX_CUERPO_MENSAJE } from './adjuntos.mjs';
 import { crearAuth, validarRemoto, esTodas } from './auth.mjs';
 import { historialDe } from './historial.mjs';
 import { pasosAgente } from './pasos-agente.mjs';
@@ -68,18 +69,22 @@ export function hostsEscucha(remoto = {}) {
   return remoto.activo && !['127.0.0.1', 'localhost'].includes(principal) && !esTodas(principal) ? [principal, '127.0.0.1'] : [principal];
 }
 
-function leerCuerpo(req) {
+// max: tope en bytes. Solo enviar mensaje (con adjuntos) usa uno mayor; el resto de la API se queda en 64 KB.
+function leerCuerpo(req, max = MAX_CUERPO) {
   return new Promise((ok, mal) => {
-    let texto = '';
+    const grande = () => new ErrorConversacion(413, max > MAX_CUERPO ? `El mensaje supera los ${Math.round(max / 1024 / 1024)} MB; adjunta menos archivos` : 'El cuerpo es demasiado grande');
+    if (Number(req.headers['content-length']) > max) { mal(grande()); req.resume(); return; }
+    const trozos = [];
     let bytes = 0;
-    req.setEncoding('utf8');
     req.on('data', (d) => {
-      bytes += Buffer.byteLength(d);
-      if (bytes > MAX_CUERPO) { mal(new ErrorConversacion(413, 'El cuerpo es demasiado grande')); req.resume(); return; }
-      texto += d;
+      if (bytes > max) return;
+      bytes += d.length;
+      if (bytes > max) { trozos.length = 0; mal(grande()); req.resume(); return; }
+      trozos.push(d);
     });
     req.on('end', () => {
-      if (bytes > MAX_CUERPO) return;
+      if (bytes > max) return;
+      const texto = Buffer.concat(trozos).toString('utf8');
       let v;
       try { v = texto ? JSON.parse(texto) : {}; } catch { mal(new ErrorConversacion(400, 'JSON inválido')); return; }
       if (!v || typeof v !== 'object' || Array.isArray(v)) { mal(new ErrorConversacion(400, 'El cuerpo debe ser un objeto JSON')); return; }
@@ -156,12 +161,13 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
     }
     if (req.method !== 'POST') throw new ErrorConversacion(405, 'Método no permitido');
     if (!auth.origenValido(req)) throw new ErrorConversacion(403, 'Origen no permitido');
-    const cuerpo = await leerCuerpo(req);
+    const esMensaje = recurso === 'conversaciones' && a && b === 'mensajes' && !c;
+    const cuerpo = await leerCuerpo(req, esMensaje ? MAX_CUERPO_MENSAJE : MAX_CUERPO);
 
     if (recurso === 'conversaciones' && !a) return json(res, conversaciones.crear(cuerpo), 201);
     if (recurso === 'conversaciones') {
       switch (b) {
-        case 'mensajes': conversaciones.enviar(a, cuerpo.texto); return json(res, { ok: true }, 202);
+        case 'mensajes': conversaciones.enviar(a, cuerpo.texto, cuerpo.adjuntos); return json(res, { ok: true }, 202);
         case 'permisos': conversaciones.responderPermiso(a, c, cuerpo.decision); return json(res, { ok: true });
         case 'modo': return json(res, conversaciones.cambiarModo(a, cuerpo.modo));
         case 'titulo': return json(res, conversaciones.renombrar(a, cuerpo.titulo));

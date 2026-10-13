@@ -1,6 +1,6 @@
 {
   "name": "orquestador",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Orquestador de agentes: ruteo de modelo y esfuerzo, verificación del modelo real, git estricto y visibilidad en vivo.",
   "author": { "name": "Gonzalo Fuentes" },
   "license": "MIT"
