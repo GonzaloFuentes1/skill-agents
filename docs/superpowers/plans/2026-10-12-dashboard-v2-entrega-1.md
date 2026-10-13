@@ -545,30 +545,35 @@ rl.on('line', (l) => {
 });
 rl.on('close', () => { entradas.push({ type: '__fin' }); despertar?.(); });
 
+// Devuelve null cuando se cierra stdin. No se usa process.exit(): en pipes de Windows truncaría stdout/stderr.
 async function esperar(tipo) {
   for (;;) {
     const i = entradas.findIndex((m) => m.type === tipo || m.type === '__fin');
     if (i >= 0) {
       const [m] = entradas.splice(i, 1);
-      if (m.type === '__fin') process.exit(0);
-      return m;
+      return m.type === '__fin' ? null : m;
     }
     await new Promise((ok) => { despertar = ok; });
   }
 }
 
-for (const paso of guion) {
-  if (paso.esperar) await esperar(paso.esperar);
-  if (paso.emitir) process.stdout.write(JSON.stringify(paso.emitir) + '\n');
-  if (paso.crudo) process.stdout.write(paso.crudo + '\n');
-  if (paso.salir !== undefined) {
-    if (paso.stderr) process.stderr.write(paso.stderr);
-    process.exitCode = paso.salir;
-    process.stdout.end(() => process.exit(paso.salir));
-    await new Promise(() => {});
+// Sin await de nivel superior: una promesa pendiente al vaciarse el loop haría salir con código 13.
+async function correr() {
+  for (const paso of guion) {
+    if (paso.esperar && (await esperar(paso.esperar)) === null) return;
+    if (paso.emitir) process.stdout.write(JSON.stringify(paso.emitir) + '\n');
+    if (paso.crudo) process.stdout.write(paso.crudo + '\n');
+    if (paso.salir !== undefined) {
+      if (paso.stderr) process.stderr.write(paso.stderr);
+      process.exitCode = paso.salir;
+      rl.close();
+      process.stdin.destroy();
+      return;
+    }
   }
+  await esperar('__nunca'); // vive hasta que se cierre stdin; entonces el proceso termina solo con código 0
 }
-await esperar('__nunca'); // vive hasta que se cierre stdin
+correr();
 ```
 
 `tests/fixtures/guiones.mjs`:
@@ -3139,7 +3144,7 @@ Todo lo demás se copia sin cambios: nodos, tarjetas, líneas, centro, chips, st
 
 - [ ] **Paso 4: crear `actividad.js` desde el `<script type="module">` actual**
 
-Crea `public/actividad.js` copiando **el contenido del `<script type="module">` del `index.html` actual (líneas 225 a 552)**, desde `import { vistaVacia, …` hasta antes de `</script>`. Después aplica estos cambios exactos:
+Crea `public/actividad.js` copiando **el contenido del `<script type="module">` del `index.html` actual (líneas 230 a 553)**, desde `import { vistaVacia, …` hasta antes de `</script>`. Después aplica estos cambios exactos:
 
 1. Cambia la primera línea del import por:
    ```js
