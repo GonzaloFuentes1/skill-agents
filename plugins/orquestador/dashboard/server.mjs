@@ -56,6 +56,13 @@ export function carpetasCon(prefijo) {
   }
 }
 
+// Interfaces donde escuchar. En modo remoto con una IP concreta (p. ej. la de Tailscale) se escucha además en
+// 127.0.0.1: lanzar.mjs consulta /salud y abre el navegador local ahí.
+export function hostsEscucha(remoto = {}) {
+  const principal = validarRemoto(remoto);
+  return remoto.activo && !['127.0.0.1', '0.0.0.0', '::'].includes(principal) ? [principal, '127.0.0.1'] : [principal];
+}
+
 function leerCuerpo(req) {
   return new Promise((ok, mal) => {
     let texto = '';
@@ -183,16 +190,26 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
     res.on('close', () => { clientes.delete(res); ultimaActividad = Date.now(); });
   }
 
-  const servidor = createServer((req, res) => {
+  const manejador = (req, res) => {
     atender(req, res).catch((e) => {
       if (res.headersSent) { res.end(); return; }
       if (e instanceof ErrorConversacion) json(res, { error: e.message }, e.status);
       else json(res, { error: 'Error interno del dashboard' }, 500);
     });
-  });
-  servidor.on('clientError', (_err, socket) => { if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n'); });
+  };
+  const nuevoHttp = () => createServer(manejador)
+    .on('clientError', (_err, socket) => { if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n'); });
+  const servidor = nuevoHttp();
+  const extras = [];
   servidor.auth = auth;
   servidor.conversaciones = conversaciones;
+
+  // Otro listener (otra interfaz) con el mismo estado: mismas sesiones, conversaciones y clientes SSE.
+  servidor.escucharTambien = (puerto, host) => new Promise((ok, mal) => {
+    const s = nuevoHttp();
+    s.once('error', mal);
+    s.listen(puerto, host, () => { s.off('error', mal); extras.push(s); ok(s); });
+  });
 
   servidor.detener = async () => {
     clearInterval(tick);
@@ -200,8 +217,10 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
     if (vigilancia) clearInterval(vigilancia);
     for (const c of clientes) c.end();
     await conversaciones.apagar();
-    servidor.closeAllConnections?.();
-    await new Promise((ok) => servidor.close(() => ok()));
+    await Promise.all([servidor, ...extras].map((s) => {
+      s.closeAllConnections?.();
+      return new Promise((ok) => s.close(() => ok()));
+    }));
   };
   return servidor;
 }
@@ -209,9 +228,18 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
 if (esPrincipal(import.meta.url)) {
   const config = cargarConfig();
   const puerto = Number(process.argv[2]) || config.puertoDashboard;
-  let host;
-  try { host = validarRemoto(config.remoto); } catch (e) { console.error(e.message); process.exit(1); }
+  let hosts;
+  try { hosts = hostsEscucha(config.remoto); } catch (e) { console.error(e.message); process.exit(1); }
   const srv = crearServidor({ inactividadMs: INACTIVIDAD_MS, alInactivo: () => srv.detener().then(() => process.exit(0)) });
   for (const senal of ['SIGINT', 'SIGTERM']) process.on(senal, () => srv.detener().then(() => process.exit(0)));
-  srv.listen(puerto, host, () => console.log(`Dashboard del orquestador: http://${host}:${puerto}/`));
+  const url = (h) => `http://${h.includes(':') ? `[${h}]` : h}:${puerto}/`;
+  const [host, ...otros] = hosts;
+  srv.listen(puerto, host, () => {
+    console.log(`Dashboard del orquestador: ${url(host)}`);
+    for (const h of otros) {
+      srv.escucharTambien(puerto, h)
+        .then(() => console.log(`También en ${url(h)}`))
+        .catch((e) => console.error(`No se pudo escuchar también en ${url(h)}: ${e.message}`));
+    }
+  });
 }

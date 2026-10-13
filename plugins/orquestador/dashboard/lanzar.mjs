@@ -38,11 +38,14 @@ export function comandoAbrir(url, plataforma = process.platform) {
   return ['xdg-open', [url]];
 }
 
+const LOCALES = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+const conCorchetes = (h) => (String(h).includes(':') && !String(h).startsWith('[') ? `[${h}]` : String(h));
+
 export function urlsRemotas(config, token) {
   const r = config.remoto ?? {};
   if (!r.activo) return [];
-  const hosts = r.hostsPermitidos?.length ? r.hostsPermitidos : [r.escuchar];
-  return hosts.map((h) => `http://${h}:${config.puertoDashboard}/?t=${token}`);
+  const hosts = r.hostsPermitidos?.length ? r.hostsPermitidos : [r.escuchar || '127.0.0.1'].filter((h) => !LOCALES.has(h));
+  return hosts.map((h) => `http://${conCorchetes(h)}:${config.puertoDashboard}/?t=${token}`);
 }
 
 async function main(argv) {

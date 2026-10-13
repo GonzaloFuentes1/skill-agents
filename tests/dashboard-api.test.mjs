@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { crearServidor, carpetasCon } from '../plugins/orquestador/dashboard/server.mjs';
+import { crearServidor, carpetasCon, hostsEscucha } from '../plugins/orquestador/dashboard/server.mjs';
 import { rutaEventos } from '../plugins/orquestador/scripts/lib/rutas.mjs';
 import { pedir, login, post, escucharSse } from './helpers/http.mjs';
 import { ESPERAR_USUARIO, ESPERAR_RESPUESTA, INIT, texto, permiso, fin } from './fixtures/guiones.mjs';
@@ -119,4 +119,25 @@ test('carpetasCon lista subcarpetas por prefijo e ignora rutas relativas', () =>
   assert.deepEqual(carpetasCon(join(base, 'proy')).sort(), [join(base, 'Proyecto A'), join(base, 'proyecto-b')].sort());
   assert.equal(carpetasCon(base + '/').length, 3);
   assert.deepEqual(carpetasCon('relativa/x'), []);
+});
+
+test('hostsEscucha: en modo remoto con una IP concreta también escucha en 127.0.0.1', () => {
+  assert.deepEqual(hostsEscucha({ activo: false, escuchar: '100.64.0.7' }), ['127.0.0.1']);
+  assert.deepEqual(hostsEscucha({ activo: true, escuchar: '100.64.0.7' }), ['100.64.0.7', '127.0.0.1']);
+  assert.deepEqual(hostsEscucha({ activo: true, escuchar: '127.0.0.1' }), ['127.0.0.1']);
+  assert.deepEqual(hostsEscucha({ activo: true, escuchar: '0.0.0.0', hostsPermitidos: ['pc.ts.net'] }), ['0.0.0.0']);
+  assert.throws(() => hostsEscucha({ activo: true, escuchar: '0.0.0.0' }), /hostsPermitidos/);
+});
+
+test('escucharTambien: un segundo listener atiende con el mismo handler y detener lo cierra', async () => {
+  const { srv, base } = await levantar();
+  const extra = await srv.escucharTambien(0, '127.0.0.1');
+  const base2 = `http://127.0.0.1:${extra.address().port}`;
+  try {
+    assert.notEqual(base2, base);
+    assert.equal((await pedir(base2, '/salud')).json().app, 'orquestador-dashboard');
+    const cookie = await login(base2, srv.auth.token);
+    assert.equal((await pedir(base2, '/api/conversaciones', { headers: { cookie } })).status, 200);
+  } finally { await srv.detener(); }
+  assert.equal(extra.listening, false);
 });

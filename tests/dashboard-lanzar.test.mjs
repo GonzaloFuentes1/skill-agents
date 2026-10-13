@@ -29,3 +29,10 @@ test('urlsRemotas: vacío si el modo remoto está apagado; una URL con token por
   assert.deepEqual(urlsRemotas({ puertoDashboard: 4321, remoto: { activo: true, escuchar: '100.64.0.7', hostsPermitidos: [] } }, 't'), ['http://100.64.0.7:4321/?t=t']);
   assert.deepEqual(urlsRemotas({ puertoDashboard: 4321, remoto: { activo: true, escuchar: '0.0.0.0', hostsPermitidos: ['pc.ts.net'] } }, 't'), ['http://pc.ts.net:4321/?t=t']);
 });
+
+test('urlsRemotas: sin hostsPermitidos y escuchando en 127.0.0.1 no hay URL remota; IPv6 entre corchetes', () => {
+  assert.deepEqual(urlsRemotas({ puertoDashboard: 4321, remoto: { activo: true, escuchar: '127.0.0.1', hostsPermitidos: [] } }, 't'), []);
+  assert.deepEqual(urlsRemotas({ puertoDashboard: 4321, remoto: { activo: true } }, 't'), []);
+  assert.deepEqual(urlsRemotas({ puertoDashboard: 4321, remoto: { activo: true, escuchar: 'fd7a:115c:a1e0::7' } }, 't'), ['http://[fd7a:115c:a1e0::7]:4321/?t=t']);
+  assert.deepEqual(urlsRemotas({ puertoDashboard: 4321, remoto: { activo: true, escuchar: '[::1]', hostsPermitidos: [] } }, 't'), []);
+});
