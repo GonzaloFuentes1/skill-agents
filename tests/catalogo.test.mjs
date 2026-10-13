@@ -6,9 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { parsearFrontmatter } from '../plugins/orquestador/scripts/lib/frontmatter.mjs';
 import { INTEGRADOS, ID_AGENTE } from '../plugins/orquestador/dashboard/agentes.mjs';
 
-// Mientras las Tareas 13–15 escriben los agentes, un archivo que falta se informa como TODO (no rompe la suite).
-// La Tarea 15 cambia esto a true: desde ahí, un archivo ausente es un fallo.
-const CONTENIDO_COMPLETO = false;
+// Catálogo completo: un archivo de agente que falte es un fallo, no un TODO.
+const CONTENIDO_COMPLETO = true;
 
 const PLUGIN = fileURLToPath(new URL('../plugins/orquestador/', import.meta.url));
 const packs = JSON.parse(readFileSync(join(PLUGIN, 'catalogo', 'packs.json'), 'utf8'));
