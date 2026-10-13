@@ -13,3 +13,4 @@ export const permiso = (rid, command) => ({ emitir: { type: 'control_request', r
 export const fin = (extra = {}) => ({ emitir: { type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, duration_ms: 900, session_id: 'ses-1', ...extra } });
 export const finInterrumpido = { emitir: { type: 'result', subtype: 'error_during_execution', is_error: true, session_id: 'ses-1', result: 'Interrumpido' } };
 export const turnoSimple = (t = 'Hola') => [ESPERAR_USUARIO, INIT, ...texto('m1', t), fin()];
+export const cancelarPermiso = (rid) => ({ emitir: { type: 'control_cancel_request', request_id: rid } });

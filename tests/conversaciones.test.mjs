@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { crearGestor, etiquetaDe, clavePermiso, ErrorConversacion } from '../plugins/orquestador/dashboard/conversaciones.mjs';
 import { rutaConversaciones } from '../plugins/orquestador/scripts/lib/rutas.mjs';
-import { ESPERAR_USUARIO, ESPERAR_RESPUESTA, ESPERAR_PEDIDO, INIT, texto, permiso, fin, finInterrumpido, turnoSimple } from './fixtures/guiones.mjs';
+import { ESPERAR_USUARIO, ESPERAR_RESPUESTA, ESPERAR_PEDIDO, INIT, texto, permiso, fin, finInterrumpido, turnoSimple, cancelarPermiso } from './fixtures/guiones.mjs';
 
 const FALSO = fileURLToPath(new URL('./fixtures/claude-falso.mjs', import.meta.url));
 
@@ -141,7 +141,7 @@ test('cerrar mientras trabaja deja la conversación inactiva, no en error', asyn
   g.enviar(c.id, 'x');
   await hasta((e) => e.tipo === 'chat:estado' && e.conv.sessionId === 'ses-1');
   g.cerrar(c.id);
-  await hasta((e) => e.tipo === 'chat:estado' && e.conv.estado === 'inactiva');
+  await hasta((e) => e.tipo === 'chat:estado' && e.conv.estado === 'inactiva' && e.conv.sessionId === 'ses-1');
   assert.equal(g.obtener(c.id).error, null);
 });
 
@@ -200,4 +200,105 @@ test('interrumpir con permiso pendiente: al terminar el turno no quedan pendient
   assert.deepEqual(g.pendientesDe(c.id), []);
   lanza(() => g.responderPermiso(c.id, 'r1', 'permitir'), 404);
   await g.apagar();
+});
+
+test('etiquetaDe: solo tipos de Conventional Commits, en título o en rama', () => {
+  assert.equal(etiquetaDe({ titulo: 'feat(api)!: algo' }), '[FEAT]');
+  assert.equal(etiquetaDe({ titulo: 'Ojo: x' }), null);
+  assert.equal(etiquetaDe({ titulo: 'https://x' }), null);
+  assert.equal(etiquetaDe({ rama: 'dependabot/x' }), null);
+  assert.equal(etiquetaDe({ titulo: 'Ojo: x', rama: 'fix/login' }), '[FIX]');
+  assert.equal(etiquetaDe({ rama: 'revert/x' }), '[REVERT]');
+});
+
+test('inactividad: un proceso en "lista" se cierra solo y la conversación queda inactiva sin error', async () => {
+  const { env, spawnFn, home } = entorno(turnoSimple());
+  const g = crearGestor({ env, spawnFn, inactividadProcesoMs: 150 });
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'x');
+  await hasta((e) => e.tipo === 'chat:fin-turno');
+  assert.equal(g.hayProcesos(), true);
+  await hasta((e) => e.tipo === 'chat:estado' && e.conv.estado === 'inactiva' && e.conv.sessionId === 'ses-1');
+  assert.deepEqual([g.hayProcesos(), g.obtener(c.id).error], [false, null]);
+});
+
+test('inactividad: no cierra un proceso que está trabajando', async () => {
+  const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT]);
+  const g = crearGestor({ env, spawnFn, inactividadProcesoMs: 50 });
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'x');
+  await hasta((e) => e.tipo === 'chat:estado' && e.conv.sessionId === 'ses-1');
+  await new Promise((r) => setTimeout(r, 250));
+  assert.deepEqual([g.hayProcesos(), g.obtener(c.id).estado], [true, 'trabajando']);
+  await g.apagar();
+});
+
+test('interrumpir sin result: tras la espera se cierra el proceso, queda inactiva y el siguiente mensaje retoma con --resume', async () => {
+  const { env, spawnFn, home, leerRegistro } = entorno([ESPERAR_USUARIO, INIT, ESPERAR_PEDIDO]);
+  const g = crearGestor({ env, spawnFn, esperaInterrupcionMs: 100 });
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'x');
+  await hasta((e) => e.tipo === 'chat:estado' && e.conv.sessionId === 'ses-1');
+  g.interrumpir(c.id);
+  const f = await hasta((e) => e.tipo === 'chat:fin-turno');
+  assert.equal(f.interrumpido, true);
+  await hasta((e) => e.tipo === 'chat:estado' && e.conv.estado === 'inactiva' && e.conv.sessionId === 'ses-1');
+  assert.deepEqual([g.hayProcesos(), g.obtener(c.id).error], [false, null]);
+  g.enviar(c.id, 'sigue');
+  await new Promise((ok, mal) => {
+    const t0 = Date.now();
+    const mirar = () => {
+      const arranques = leerRegistro().filter((r) => r.argv);
+      if (arranques.length === 2) { const a = arranques[1].argv; return a[a.indexOf('--resume') + 1] === 'ses-1' ? ok() : mal(new Error('sin --resume')); }
+      if (Date.now() - t0 > 5000) return mal(new Error('timeout'));
+      setTimeout(mirar, 10);
+    };
+    mirar();
+  });
+  await g.apagar();
+});
+
+test('interrumpir con result a tiempo: no se cierra el proceso', async () => {
+  const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, ESPERAR_PEDIDO, finInterrumpido]);
+  const g = crearGestor({ env, spawnFn, esperaInterrupcionMs: 150 });
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'x');
+  await hasta((e) => e.tipo === 'chat:estado' && e.conv.sessionId === 'ses-1');
+  g.interrumpir(c.id);
+  await hasta((e) => e.tipo === 'chat:fin-turno');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual([g.hayProcesos(), g.obtener(c.id).estado], [true, 'lista']);
+  await g.apagar();
+});
+
+test('control_cancel_request: quita el pendiente y emite permiso-resuelto "cancelado"', async () => {
+  const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, permiso('r1', 'ls'), cancelarPermiso('r1')]);
+  const g = crearGestor({ env, spawnFn });
+  const { hasta } = recolector(g);
+  const c = g.crear({ cwd: home });
+  g.enviar(c.id, 'x');
+  const r = await hasta((e) => e.tipo === 'chat:permiso-resuelto');
+  assert.deepEqual([r.solicitudId, r.decision, r.herramienta], ['r1', 'cancelado', 'Bash']);
+  assert.deepEqual(g.pendientesDe(c.id), []);
+  assert.equal(g.obtener(c.id).estado, 'trabajando');
+  lanza(() => g.responderPermiso(c.id, 'r1', 'permitir'), 404);
+  await g.apagar();
+});
+
+test('guardar: un error de disco no lanza; se informa por console.error', () => {
+  const { env, spawnFn, home } = entorno(turnoSimple());
+  mkdirSync(rutaConversaciones(env), { recursive: true }); // el destino es un directorio: renameSync falla
+  const errores = [];
+  const original = console.error;
+  console.error = (...a) => errores.push(a.join(' '));
+  try {
+    const g = crearGestor({ env, spawnFn });
+    const c = g.crear({ cwd: home });
+    assert.equal(g.obtener(c.id).id, c.id);
+  } finally { console.error = original; }
+  assert.ok(errores.some((x) => /conversaciones/.test(x)), errores.join('\n'));
 });

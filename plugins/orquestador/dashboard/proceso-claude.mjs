@@ -26,10 +26,21 @@ export function argumentos({ sessionId = null, modo = 'preguntar' } = {}) {
   return a;
 }
 
+// Un .cmd solo corre a través del shell, que no cita nada: una ruta con espacios hay que citarla a mano.
+export function invocacion(binario, args) {
+  const b = String(binario);
+  const shell = /\.cmd"?$/i.test(b);
+  const comando = shell && /\s/.test(b) && !/^".*"$/.test(b) ? `"${b}"` : b;
+  return { comando, args, shell };
+}
+
+// Los mensajes de un subagente (parent_tool_use_id) se ignoran; los pedidos de control y el result son siempre del proceso.
+const DE_SUBAGENTE = new Set(['stream_event', 'assistant', 'user']);
+
 export function crearNormalizador() {
   let mensajeActual = null;
   return (msg) => {
-    if (!msg || typeof msg !== 'object' || msg.parent_tool_use_id) return [];
+    if (!msg || typeof msg !== 'object' || (msg.parent_tool_use_id && DE_SUBAGENTE.has(msg.type))) return [];
     switch (msg.type) {
       case 'system':
         return msg.subtype === 'init' ? [{ tipo: 'sesion', sessionId: msg.session_id ?? null, modelo: msg.model ?? null }] : [];
@@ -59,6 +70,8 @@ export function crearNormalizador() {
           ? [{ tipo: 'permiso', solicitudId: msg.request_id, herramienta: r.tool_name, entrada: r.input ?? {}, motivo: r.decision_reason ?? null }]
           : [];
       }
+      case 'control_cancel_request':
+        return [{ tipo: 'permiso-cancelado', solicitudId: msg.request_id ?? null }];
       default:
         return [];
     }
@@ -80,9 +93,8 @@ export function abrirProceso({ cwd, sessionId = null, modo = 'preguntar', binari
   const em = new EventEmitter();
   const entornoHijo = { ...env, ORQUESTADOR_CANAL: 'dashboard' };
   delete entornoHijo.CLAUDECODE; // lanzado desde una sesión de Claude Code: el hijo no debe creerse anidado
-  const hijo = spawnFn(binario, argumentos({ sessionId, modo }), {
-    cwd, env: entornoHijo, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell: /\.cmd$/i.test(String(binario)),
-  });
+  const { comando, args, shell } = invocacion(binario, argumentos({ sessionId, modo }));
+  const hijo = spawnFn(comando, args, { cwd, env: entornoHijo, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell });
   const normalizar = crearNormalizador();
   const entradas = new Map();
   const decodificador = new StringDecoder('utf8');
@@ -105,6 +117,7 @@ export function abrirProceso({ cwd, sessionId = null, modo = 'preguntar', binari
       try { msg = JSON.parse(l); } catch { em.emit('basura', l); continue; }
       for (const e of normalizar(msg)) {
         if (e.tipo === 'permiso') entradas.set(e.solicitudId, e.entrada);
+        if (e.tipo === 'permiso-cancelado') entradas.delete(e.solicitudId);
         em.emit('evento', e);
       }
     }

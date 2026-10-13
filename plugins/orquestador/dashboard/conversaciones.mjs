@@ -1,5 +1,5 @@
 // Registro y ciclo de vida de las conversaciones del dashboard. Persiste en ~/.claude/orquestador/conversaciones.json.
-import { readFileSync, writeFileSync, renameSync, mkdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, mkdirSync, statSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -16,11 +16,12 @@ const EN_CURSO = new Set(['trabajando', 'esperando-permiso']);
 const TITULO_NUEVO = 'Nueva conversación';
 const DE_ARCHIVO = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
+const TIPOS_CC = new Set(['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'build', 'ci', 'chore', 'revert']);
+const comoEtiqueta = (m) => (m && TIPOS_CC.has(m[1].toLowerCase()) ? `[${m[1].toUpperCase()}]` : null);
+
+// Solo tipos de Conventional Commits: "Ojo: x", "https://x" o "dependabot/x" no son etiquetas.
 export function etiquetaDe({ rama, titulo } = {}) {
-  const t = /^([a-z]+)(\([^)]*\))?!?:/i.exec(titulo ?? '');
-  if (t) return `[${t[1].toUpperCase()}]`;
-  const r = /^([a-z]+)\//i.exec(rama ?? '');
-  return r ? `[${r[1].toUpperCase()}]` : null;
+  return comoEtiqueta(/^([a-z]+)(\([^)]*\))?!?:/i.exec(titulo ?? '')) ?? comoEtiqueta(/^([a-z]+)\//i.exec(rama ?? ''));
 }
 
 export function clavePermiso(herramienta, entrada = {}) {
@@ -39,7 +40,14 @@ function leerLista(env) {
   try { const l = JSON.parse(readFileSync(rutaConversaciones(env), 'utf8')); return Array.isArray(l) ? l : []; } catch { return []; }
 }
 
-export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date().toISOString() } = {}) {
+const dormir = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const INTENTOS_GUARDAR = 3;
+
+export function crearGestor({
+  env = process.env, spawnFn, ahora = () => new Date().toISOString(),
+  inactividadProcesoMs = 10 * 60 * 1000, // un proceso en "lista" sin mensajes se cierra; el siguiente lo retoma con --resume
+  esperaInterrupcionMs = 10_000, // si tras interrumpir no llega el result, se cierra el proceso
+} = {}) {
   // Un proceso de una vida anterior del servidor no se puede recuperar: al cerrarse su stdin, claude -p termina solo.
   const lista = leerLista(env).map((c) => (EN_CURSO.has(c.estado) || c.pid ? { ...c, estado: 'inactiva', pid: null } : c));
   const procesos = new Map();
@@ -47,16 +55,33 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
   const reglas = new Map();
   const cerrando = new Set();
   const interrumpidas = new Set();
+  const temporizadores = { inactividad: new Map(), interrupcion: new Map() };
   const emisor = new EventEmitter();
   emisor.setMaxListeners(0);
 
+  // Un error de disco (antivirus, OneDrive, disco lleno) no debe tumbar el servidor: se reintenta y se informa.
   const guardar = () => {
     const ruta = rutaConversaciones(env);
-    mkdirSync(dirname(ruta), { recursive: true });
     const tmp = `${ruta}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify(lista, null, 2));
-    renameSync(tmp, ruta);
+    for (let intento = 1; ; intento++) {
+      try {
+        mkdirSync(dirname(ruta), { recursive: true });
+        writeFileSync(tmp, JSON.stringify(lista, null, 2));
+        renameSync(tmp, ruta);
+        return;
+      } catch (e) {
+        if (intento < INTENTOS_GUARDAR) { dormir(50); continue; }
+        try { rmSync(tmp, { force: true }); } catch { /* nada que limpiar */ }
+        console.error(`No se pudo guardar ${ruta}: ${e.message}`);
+        return;
+      }
+    }
   };
+  const armar = (tipo, id, ms, fn) => {
+    desarmar(tipo, id);
+    if (ms > 0) temporizadores[tipo].set(id, setTimeout(() => { temporizadores[tipo].delete(id); fn(); }, ms).unref());
+  };
+  const desarmar = (tipo, id) => { clearTimeout(temporizadores[tipo].get(id)); temporizadores[tipo].delete(id); };
   const emitir = (e) => emisor.emit('chat', e);
   const publica = (c) => ({ ...c, etiqueta: etiquetaDe(c) });
   const emitirEstado = (c) => emitir({ tipo: 'chat:estado', conversacion: c.id, conv: publica(c) });
@@ -97,11 +122,23 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
         emitirEstado(c);
         return;
       }
+      case 'permiso-cancelado': {
+        // Claude Code retiró la solicitud (p. ej. tras un interrupt): ya no se puede responder.
+        const mapa = pendientes.get(c.id);
+        const p = mapa?.get(e.solicitudId);
+        if (!p) return;
+        mapa.delete(e.solicitudId);
+        if (!mapa.size && c.estado === 'esperando-permiso') c.estado = 'trabajando';
+        emitir({ tipo: 'chat:permiso-resuelto', conversacion: c.id, solicitudId: e.solicitudId, decision: 'cancelado', herramienta: p.herramienta, entrada: p.entrada });
+        emitirEstado(c);
+        return;
+      }
       case 'texto-parcial':
       case 'mensaje':
         emitir({ ...e, tipo: `chat:${e.tipo}`, conversacion: c.id });
         return;
       case 'fin-turno': {
+        desarmar('interrupcion', c.id);
         const interrumpido = interrumpidas.delete(c.id);
         pendientes.get(c.id)?.clear();
         if (e.sessionId) c.sessionId = e.sessionId;
@@ -112,9 +149,12 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
         guardar();
         emitir({ tipo: 'chat:fin-turno', conversacion: c.id, ok: e.ok, error: c.error, costoUSD: e.costoUSD ?? null, interrumpido });
         emitirEstado(c);
+        if (c.estado === 'lista') armar('inactividad', c.id, inactividadProcesoMs, () => cerrarProceso(c, 'lista'));
         return;
       }
       case 'salida':
+        desarmar('inactividad', c.id);
+        desarmar('interrupcion', c.id);
         procesos.delete(c.id);
         pendientes.delete(c.id);
         interrumpidas.delete(c.id);
@@ -127,6 +167,23 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
         return;
       default:
     }
+  }
+
+  // Cierra el proceso como cierre pedido (la conversación queda inactiva, no en error), solo si sigue en el estado esperado.
+  function cerrarProceso(c, estadoEsperado) {
+    const p = procesos.get(c.id);
+    if (!p || (estadoEsperado && c.estado !== estadoEsperado)) return;
+    cerrando.add(c.id);
+    p.cerrar();
+  }
+
+  // El interrupt no trajo result a tiempo: se da el turno por interrumpido y se cierra el proceso.
+  function interrupcionVencida(c) {
+    if (!procesos.has(c.id) || !EN_CURSO.has(c.estado)) return;
+    interrumpidas.delete(c.id);
+    pendientes.get(c.id)?.clear();
+    emitir({ tipo: 'chat:fin-turno', conversacion: c.id, ok: false, error: null, costoUSD: null, interrumpido: true });
+    cerrarProceso(c);
   }
 
   return {
@@ -155,6 +212,7 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
       const max = cargarConfig(env).conversacionesMax;
       if (!EN_CURSO.has(c.estado) && enCurso() >= max) throw new ErrorConversacion(409, `Hay ${enCurso()} conversaciones trabajando; espera o detén una`);
       const p = asegurarProceso(c);
+      desarmar('inactividad', c.id);
       interrumpidas.delete(c.id);
       if (c.titulo === TITULO_NUEVO) c.titulo = t.length > 60 ? `${t.slice(0, 59)}…` : t;
       c.estado = 'trabajando';
@@ -203,7 +261,12 @@ export function crearGestor({ env = process.env, spawnFn, ahora = () => new Date
     interrumpir(id) {
       const c = buscar(id);
       const p = procesos.get(c.id);
-      if (p) { if (EN_CURSO.has(c.estado)) interrumpidas.add(c.id); p.interrumpir(); }
+      if (!p) return;
+      if (EN_CURSO.has(c.estado)) {
+        interrumpidas.add(c.id);
+        armar('interrupcion', c.id, esperaInterrupcionMs, () => interrupcionVencida(c));
+      }
+      p.interrumpir();
     },
 
     cerrar(id) {

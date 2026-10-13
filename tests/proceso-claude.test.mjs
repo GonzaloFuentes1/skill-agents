@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { abrirProceso, argumentos, resolverBinario, crearNormalizador, MODOS } from '../plugins/orquestador/dashboard/proceso-claude.mjs';
+import { abrirProceso, argumentos, resolverBinario, crearNormalizador, invocacion, MODOS } from '../plugins/orquestador/dashboard/proceso-claude.mjs';
 import { ESPERAR_USUARIO, ESPERAR_RESPUESTA, ESPERAR_PEDIDO, INIT, texto, permiso, fin, turnoSimple } from './fixtures/guiones.mjs';
 
 const FALSO = fileURLToPath(new URL('./fixtures/claude-falso.mjs', import.meta.url));
@@ -62,6 +62,28 @@ test('normalizador: ignora mensajes de subagentes y tipos desconocidos', () => {
   assert.deepEqual(n({ type: 'assistant', parent_tool_use_id: 'toolu_x', message: { id: 'm', content: [{ type: 'text', text: 'sub' }] } }), []);
   assert.deepEqual(n({ type: 'rate_limit_event' }), []);
   assert.deepEqual(n(null), []);
+});
+
+test('normalizador: el filtro de subagentes solo aplica a stream_event, assistant y user', () => {
+  const n = crearNormalizador();
+  const sub = { parent_tool_use_id: 'toolu_x' };
+  assert.deepEqual(n({ ...sub, type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'x' } } }), []);
+  assert.deepEqual(n({ ...sub, type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] } }), []);
+  assert.deepEqual(n({ ...sub, type: 'control_request', request_id: 'r1', request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'ls' } } }),
+    [{ tipo: 'permiso', solicitudId: 'r1', herramienta: 'Bash', entrada: { command: 'ls' }, motivo: null }]);
+  assert.equal(n({ ...sub, type: 'result', subtype: 'success', is_error: false })[0].tipo, 'fin-turno');
+});
+
+test('normalizador: control_cancel_request es permiso-cancelado', () => {
+  const n = crearNormalizador();
+  assert.deepEqual(n({ type: 'control_cancel_request', request_id: 'r7' }), [{ tipo: 'permiso-cancelado', solicitudId: 'r7' }]);
+});
+
+test('invocacion: un .cmd va por shell y se cita si tiene espacios; un .exe no', () => {
+  assert.deepEqual(invocacion('C:\\Program Files\\nodejs\\claude.cmd', ['-p']), { comando: '"C:\\Program Files\\nodejs\\claude.cmd"', args: ['-p'], shell: true });
+  assert.deepEqual(invocacion('C:\\npm\\claude.cmd', ['-p']), { comando: 'C:\\npm\\claude.cmd', args: ['-p'], shell: true });
+  assert.deepEqual(invocacion('"C:\\Program Files\\claude.cmd"', ['-p']).comando, '"C:\\Program Files\\claude.cmd"');
+  assert.deepEqual(invocacion('C:\\Program Files\\claude.exe', ['-p']), { comando: 'C:\\Program Files\\claude.exe', args: ['-p'], shell: false });
 });
 
 test('turno simple: sesión, texto parcial, mensaje y fin; canal dashboard y sin CLAUDECODE', async () => {
