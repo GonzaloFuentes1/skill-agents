@@ -61,7 +61,7 @@ test('hooks.json solo referencia scripts que existen', () => {
 
 test('la skill orquestar documenta los planes en pipeline y la versión es la misma en plugin y marketplace', () => {
   const skill = readFileSync(join(PLUGIN, 'skills', 'orquestar', 'SKILL.md'), 'utf8');
-  assert.match(skill, /## 6\. Planes en pipeline/);
+  assert.match(skill, /## 5\. Planes en pipeline/);
   assert.match(skill, /orquestador-plan/);
   assert.match(skill, /E2 · /);
   const plugin = leerJson(join(PLUGIN, '.claude-plugin', 'plugin.json'));

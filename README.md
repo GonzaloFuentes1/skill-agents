@@ -35,13 +35,13 @@ En el dashboard:
 - **Animaciones** activa o desactiva los viajes de las tarjetas. Si Windows tiene "Mostrar animaciones" apagado, viene desactivado; actívalo ahí o abre `?animar=1`.
 - **Seguir la más reciente** cambia la vista sola cuando empieza otra sesión.
 
-La configuración está en `~/.claude/orquestador/config.json`: `fableMaxPorSesion`, `paraleloMax`, `puertoDashboard`, `ramasProtegidas` y `precios`.
+La configuración está en `~/.claude/orquestador/config.json`: `fableMaxPorSesion`, `paraleloMax`, `puertoDashboard`, `ramasProtegidas`, `precios`, `conversacionesMax` (conversaciones del dashboard trabajando a la vez), `rutaClaude` (ruta al binario de Claude Code si no está en el PATH) y `remoto` (ver abajo).
 
 ## Dashboard remoto (opcional)
 
 Por defecto, el dashboard solo escucha en `127.0.0.1` y pide una sesión, que se inicia sola al abrirlo con `/orquestador:dashboard`. Para abrirlo desde otro equipo o desde el celular, usa una red privada como Tailscale. Nunca lo expongas a internet abierto.
 
-1. En `~/.claude/orquestador/config.json`, agrega: `"remoto": { "activo": true, "escuchar": "<IP de Tailscale>", "hostsPermitidos": ["<nombre>.ts.net"] }`.
+1. En `~/.claude/orquestador/config.json`, agrega: `"remoto": { "activo": true, "escuchar": "<IP de Tailscale>", "hostsPermitidos": ["<nombre>.ts.net"] }`. El servidor sigue escuchando también en `127.0.0.1` para el navegador de este equipo.
 2. Cierra el dashboard y vuelve a abrirlo con `/orquestador:dashboard --remoto`. Imprime un enlace con token.
 3. Ese enlace equivale a una contraseña: quien lo tenga puede ejecutar código en tu equipo.
 

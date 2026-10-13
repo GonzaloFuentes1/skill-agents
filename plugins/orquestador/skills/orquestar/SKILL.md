@@ -43,7 +43,7 @@ La `description` del tool Agent es la **meta corta**: es lo que el usuario ve en
 - Revisa cada retorno antes de seguir. Si no alcanza la calidad, re-delega **subiendo un escalón** de la rúbrica; no repitas el mismo encargo con el mismo modelo.
 - Al cerrar una tarea grande, ofrece `/orquestador:estado` para mostrar qué se delegó y cuánto costó.
 
-## 6. Planes en pipeline
+## 5. Planes en pipeline
 
 Si la tarea requiere **3 o más delegaciones** o incluye una **acción irreversible** (publicar, borrar, mergear, enviar), presenta primero el plan y **termina el turno** esperando aprobación.
 
@@ -64,7 +64,7 @@ Si la tarea requiere **3 o más delegaciones** o incluye una **acción irreversi
 - Al delegar una etapa, empieza la `description` del tool Agent con su id: `E2 · Verificadores de CSV`. Así el dashboard sabe en qué etapa va cada agente.
 - Si el usuario pide cambios al plan, presenta el plan corregido completo, no un diff.
 
-## 7. Reglas que siempre aplican
+## 6. Reglas que siempre aplican
 
 - Nunca agregues coautoría de Claude (`Co-Authored-By`, "Generated with Claude") en commits ni PRs.
 - Para operaciones git, sigue la skill `orquestador:flujo-git` o delega en `orquestador:guardian-git`.
