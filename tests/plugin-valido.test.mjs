@@ -58,3 +58,14 @@ test('hooks.json solo referencia scripts que existen', () => {
     }
   }
 });
+
+test('la skill orquestar documenta los planes en pipeline y la versión es la misma en plugin y marketplace', () => {
+  const skill = readFileSync(join(PLUGIN, 'skills', 'orquestar', 'SKILL.md'), 'utf8');
+  assert.match(skill, /## 6\. Planes en pipeline/);
+  assert.match(skill, /orquestador-plan/);
+  assert.match(skill, /E2 · /);
+  const plugin = leerJson(join(PLUGIN, '.claude-plugin', 'plugin.json'));
+  const entrada = leerJson(join(RAIZ, '.claude-plugin', 'marketplace.json')).plugins.find((x) => x.name === 'orquestador');
+  assert.equal(entrada.version, plugin.version);
+  assert.equal(plugin.version, '0.2.0');
+});

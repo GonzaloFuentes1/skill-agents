@@ -10,7 +10,7 @@ Marketplace de Claude Code con el plugin **`orquestador`**. Convierte la sesión
 - **Hooks** que registran cada delegación (meta, agente, modelo y esfuerzo pedidos, modelo real, tokens y costo) y alertan si el modelo real no coincide con el pedido.
 - **Git estricto** por Bash y por PowerShell: rama por tarea, Conventional Commits, PR con CI, squash-merge y sin coautoría de IA.
 - **Status line** con el orquestador, los subagentes activos, el uso de Fable y el costo.
-- **Dashboard local animado**: el orquestador al centro, y una tarjeta que viaja a cada subagente con su meta, modelo y esfuerzo y vuelve con el resultado.
+- **Dashboard local**: chat con un orquestador propio (permisos con botones, varias conversaciones con historial, planes en pipeline con barreras), detalle en vivo de cada agente y la vista animada de actividad. Tema oscuro, con colores que indican el estado y el modelo.
 
 ## Instalación
 
@@ -36,6 +36,14 @@ En el dashboard:
 - **Seguir la más reciente** cambia la vista sola cuando empieza otra sesión.
 
 La configuración está en `~/.claude/orquestador/config.json`: `fableMaxPorSesion`, `paraleloMax`, `puertoDashboard`, `ramasProtegidas` y `precios`.
+
+## Dashboard remoto (opcional)
+
+Por defecto, el dashboard solo escucha en `127.0.0.1` y pide una sesión, que se inicia sola al abrirlo con `/orquestador:dashboard`. Para abrirlo desde otro equipo o desde el celular, usa una red privada como Tailscale. Nunca lo expongas a internet abierto.
+
+1. En `~/.claude/orquestador/config.json`, agrega: `"remoto": { "activo": true, "escuchar": "<IP de Tailscale>", "hostsPermitidos": ["<nombre>.ts.net"] }`.
+2. Cierra el dashboard y vuelve a abrirlo con `/orquestador:dashboard --remoto`. Imprime un enlace con token.
+3. Ese enlace equivale a una contraseña: quien lo tenga puede ejecutar código en tu equipo.
 
 ## Contribuir
 
