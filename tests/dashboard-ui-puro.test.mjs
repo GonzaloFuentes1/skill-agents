@@ -4,6 +4,8 @@ import { familiaModelo, capitalizar, nombreAgente, claseEstado, textoEstado } fr
 import { chatVacio, desdeHistorial, reducirChat } from '../plugins/orquestador/dashboard/public/chat-vista.js';
 import { validarPlan, segmentar, etapaDeMeta, estadoEtapas } from '../plugins/orquestador/dashboard/public/plan-vista.js';
 import { vistaVacia, reducir } from '../plugins/orquestador/dashboard/public/estado-vista.js';
+import { verificacion } from '../plugins/orquestador/dashboard/public/agentes-panel.js';
+import { resumenEntrada } from '../plugins/orquestador/dashboard/public/chat.js';
 
 const PLAN = {
   titulo: 'Rediseño', riesgos: [{ titulo: 'Permisos', planB: 'MCP propio' }],
@@ -86,4 +88,18 @@ test('estado-vista: agente-inicio y fin guardan agentId en el nodo', () => {
   reducir(v, { session: 's', tipo: 'delegacion', id: 't2', agente: 'Plan', modelo: 'opus', ts: '2026-10-12T10:00:01Z' });
   reducir(v, { session: 's', tipo: 'fin', id: 't2', agentId: 'a2', ts: '2026-10-12T10:00:02Z' });
   assert.equal(v.sesiones.s.nodos.t2.agentId, 'a2');
+});
+
+test('verificacion: coincide, no coincide, sin resultado, heredado', () => {
+  assert.deepEqual(verificacion({ modelo: 'sonnet', resultado: { modeloReal: 'claude-sonnet-5-5' } }), { texto: '✓ Sonnet', clase: 'e-listo' });
+  assert.deepEqual(verificacion({ modelo: 'opus', resultado: { modeloReal: 'claude-sonnet-5-5' } }), { texto: '⚠ Sonnet', clase: 'e-error' });
+  assert.deepEqual(verificacion({ modelo: 'opus', estado: 'activo' }), { texto: 'Corriendo', clase: 'tenue' });
+  assert.equal(verificacion({ modelo: 'heredado', resultado: { modeloReal: 'claude-opus-5-5' } }).clase, 'e-listo');
+});
+
+test('resumenEntrada: campo clave por herramienta y JSON recortado para las demás', () => {
+  assert.equal(resumenEntrada('Bash', { command: 'npm test' }), 'npm test');
+  assert.equal(resumenEntrada('Read', { file_path: 'a.js' }), 'a.js');
+  assert.equal(resumenEntrada('X', { a: 1 }), '{"a":1}');
+  assert.equal(resumenEntrada('X', { a: 'y'.repeat(500) }).length, 200);
 });
