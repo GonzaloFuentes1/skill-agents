@@ -125,6 +125,7 @@ test('hostsEscucha: en modo remoto con una IP concreta también escucha en 127.0
   assert.deepEqual(hostsEscucha({ activo: false, escuchar: '100.64.0.7' }), ['127.0.0.1']);
   assert.deepEqual(hostsEscucha({ activo: true, escuchar: '100.64.0.7' }), ['100.64.0.7', '127.0.0.1']);
   assert.deepEqual(hostsEscucha({ activo: true, escuchar: '127.0.0.1' }), ['127.0.0.1']);
+  assert.deepEqual(hostsEscucha({ activo: true, escuchar: 'localhost' }), ['localhost']);
   assert.deepEqual(hostsEscucha({ activo: true, escuchar: '0.0.0.0', hostsPermitidos: ['pc.ts.net'] }), ['0.0.0.0']);
   assert.throws(() => hostsEscucha({ activo: true, escuchar: '0.0.0.0' }), /hostsPermitidos/);
 });

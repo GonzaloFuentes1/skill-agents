@@ -60,7 +60,7 @@ export function carpetasCon(prefijo) {
 // 127.0.0.1: lanzar.mjs consulta /salud y abre el navegador local ahí.
 export function hostsEscucha(remoto = {}) {
   const principal = validarRemoto(remoto);
-  return remoto.activo && !['127.0.0.1', '0.0.0.0', '::'].includes(principal) ? [principal, '127.0.0.1'] : [principal];
+  return remoto.activo && !['127.0.0.1', 'localhost', '0.0.0.0', '::'].includes(principal) ? [principal, '127.0.0.1'] : [principal];
 }
 
 function leerCuerpo(req) {
