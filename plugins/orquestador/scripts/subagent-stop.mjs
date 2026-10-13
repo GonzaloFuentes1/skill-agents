@@ -92,7 +92,8 @@ export async function manejar(entrada, env = process.env) {
   }
   const r = await conEstado(entrada.session_id, (e) => cerrarDelegacion(entrada, e, analisis), env);
   for (const ev of r.eventos) emitir(ev.tipo === 'fin' ? { ...ev, transcript: ruta } : ev, env);
-  return r.alerta ? { systemMessage: `[orquestador] ${r.alerta}` } : null;
+  // alertasModelo:false silencia el aviso en la terminal; el evento `alerta` ya quedó en events.jsonl.
+  return r.alerta && config.alertasModelo !== false ? { systemMessage: `[orquestador] ${r.alerta}` } : null;
 }
 
 if (esPrincipal(import.meta.url)) ejecutarHook((e) => manejar(e));

@@ -25,6 +25,8 @@ Eres el orquestador. Tu trabajo es decidir **qué** se delega, **a quién**, con
 
 Pasa **siempre** `subagent_type`, `model` y `effort` explícitos al tool Agent, aunque coincidan con el frontmatter del agente. Si el hook niega una delegación (por el tope de Fable o por paralelismo), no insistas. Baja un escalón o espera a que terminen las delegaciones en curso.
 
+Si el contexto de inicio trae una **Rúbrica personalizada del usuario**, úsala: manda sobre esta tabla. Las clases son las mismas; solo cambian el modelo y el esfuerzo de cada una.
+
 ## 3. Plantilla del encargo (el prompt del subagente)
 
 Los subagentes no ven esta conversación. Escribe un prompt autocontenido:

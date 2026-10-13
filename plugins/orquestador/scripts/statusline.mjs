@@ -17,7 +17,7 @@ export function renderLinea(entrada, estado, config) {
   if (activas.length) partes.push(activas.map((a) => `▶ ${nombreBase(a.agente)} (${familia(a.modelo)}·${a.esfuerzo})`).join(' '));
   partes.push(`fable ${estado.fableUsados}/${config.fableMaxPorSesion}`);
   const costo = entrada.cost?.total_cost_usd;
-  if (typeof costo === 'number') partes.push(`$${costo.toFixed(2)}`);
+  if (typeof costo === 'number' && config.mostrarCosto !== false) partes.push(`$${costo.toFixed(2)}`);
   return partes.join(' │ ');
 }
 
