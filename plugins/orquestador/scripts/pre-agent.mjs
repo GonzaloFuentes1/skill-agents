@@ -43,7 +43,7 @@ export function decidirDelegacion(entrada, estado, config, definicion) {
   }
   const meta = leer.meta(entrada);
   estado.activas[id] = { agente, meta, modelo, esfuerzo, inicio: Date.now(), agentId: null,
-    promptHash: hashPrompt(entrada.tool_input?.prompt), contadaFable: esFable };
+    promptHash: hashPrompt(entrada.tool_input?.prompt), contadaFable: esFable, nombre: entrada.tool_input?.name ?? null };
   if (esFable) estado.fableUsados += 1;
   return {
     evento: { ...base, tipo: 'delegacion', meta, modelo, esfuerzo, origenModelo,

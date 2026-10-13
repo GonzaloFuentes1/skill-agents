@@ -8,6 +8,7 @@ import { EventEmitter } from 'node:events';
 import { rutaConversaciones } from '../scripts/lib/rutas.mjs';
 import { cargarConfig } from '../scripts/lib/config.mjs';
 import { leerJsonUsuario, respaldar } from '../scripts/lib/archivos.mjs';
+import { cerrarDeSesion } from '../scripts/lib/cierres.mjs';
 import { abrirProceso, resolverBinario, MODOS } from './proceso-claude.mjs';
 
 export class ErrorConversacion extends Error {
@@ -230,6 +231,8 @@ export function crearGestor({
         interrumpidas.delete(c.id);
         c.pid = null;
         c.costoPrevio = c.costoUSD ?? 0;
+        // Sus agentes en segundo plano murieron con el proceso: se cierran como detenidos y liberan el cupo.
+        if (c.sessionId) cerrarDeSesion(c.sessionId, () => true, 'proceso-cerrado', env).catch(() => {});
         if (cerrando.delete(c.id)) { c.estado = 'inactiva'; c.error = null; }
         else if (EN_CURSO.has(c.estado) || e.codigo !== 0) { c.estado = 'error'; c.error = e.error ?? 'Claude Code terminó inesperadamente'; }
         else if (c.estado !== 'error') c.estado = 'inactiva';

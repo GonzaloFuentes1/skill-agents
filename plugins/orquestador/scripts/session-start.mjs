@@ -7,6 +7,7 @@ import { rutaRaizPlugin } from './lib/rutas.mjs';
 import { emitir } from './lib/eventos.mjs';
 import { cargarConfig, normalizarRubrica, rubricaEsDeFabrica } from './lib/config.mjs';
 import { ejecutarHook, contexto, esPrincipal } from './lib/hook-io.mjs';
+import { cerrarDeSesion } from './lib/cierres.mjs';
 
 const RAIZ_PLUGIN = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
 export const RECORDATORIO = 'Orquestador activo. Antes de delegar trabajo de varios pasos, carga la skill `orquestador:orquestar` '
@@ -40,4 +41,10 @@ export function manejarInicio(entrada, env = process.env, raizPlugin = RAIZ_PLUG
   return contexto('SessionStart', partes.join('\n\n'));
 }
 
-if (esPrincipal(import.meta.url)) ejecutarHook(async (e) => manejarInicio(e));
+// Al retomar una sesión, los agentes en segundo plano del proceso anterior ya no existen: se cierran como detenidos.
+export async function cerrarAlRetomar(entrada, env = process.env) {
+  if (env.ORQUESTADOR_CANAL === '' || entrada?.source !== 'resume') return 0;
+  try { return await cerrarDeSesion(entrada.session_id, () => true, 'sesion-retomada', env); } catch { return 0; }
+}
+
+if (esPrincipal(import.meta.url)) ejecutarHook(async (e) => { await cerrarAlRetomar(e); return manejarInicio(e); });
