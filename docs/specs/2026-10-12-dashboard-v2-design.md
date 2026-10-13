@@ -175,7 +175,7 @@ Ahora el dashboard puede ejecutar código, y eso cambia el modelo de amenaza.
   - `lanzar.mjs` abre `http://127.0.0.1:<puerto>/?t=<token>`.
   - El servidor cambia ese token por una cookie `HttpOnly; SameSite=Strict` y redirige sin el token en la URL.
   - Todo `POST` exige la cookie y además un `Origin` igual al host servido.
-  - Las peticiones `GET` de datos (`/api/*`, `/eventos`, `/sesiones` y `/estado`) también exigen la cookie. Solo `/salud` y los estáticos quedan abiertos, porque exponen el contenido de las conversaciones.
+  - Las peticiones `GET` de datos (`/api/*`, `/eventos`, `/sesiones` y `/estado`) también exigen la cookie, porque exponen el contenido de las conversaciones. Solo `/salud` y los estáticos quedan abiertos.
 - **Modo remoto** (`config.remoto = { activo: false, escuchar: "127.0.0.1", hostsPermitidos: [] }`):
   - Al activarlo, el servidor escucha en la IP configurada (por ejemplo, la IP de Tailscale) y acepta solo los `Host` de `hostsPermitidos`.
   - El acceso inicial necesita el token, que se muestra con `/orquestador:dashboard --remoto`.
