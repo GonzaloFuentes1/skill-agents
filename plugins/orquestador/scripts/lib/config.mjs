@@ -129,7 +129,7 @@ export function validarConfig(parcial) {
   const errores = {};
   const limpio = {};
   for (const [k, v] of Object.entries(parcial)) {
-    if (!VALIDADORES[k]) continue; // desconocida o no editable desde el dashboard (p. ej. rutaClaude)
+    if (!Object.hasOwn(VALIDADORES, k)) continue; // desconocida o no editable desde el dashboard (p. ej. rutaClaude)
     const error = VALIDADORES[k](v);
     if (error) errores[k] = error;
     else limpio[k] = structuredClone(v);

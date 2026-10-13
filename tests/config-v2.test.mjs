@@ -110,3 +110,9 @@ test('guardarConfig: con errores no escribe; un config.json inválido no se pisa
   assert.match(r2.errores._, /no es JSON válido/);
   assert.equal(readFileSync(rutaConfig(env), 'utf8'), '{roto');
 });
+
+test('validarConfig: claves del prototipo (constructor, __proto__, toString) se ignoran sin lanzar', () => {
+  const { errores, limpio } = validarConfig(JSON.parse('{"constructor":1,"__proto__":1,"toString":2,"paraleloMax":3}'));
+  assert.deepEqual(errores, {});
+  assert.deepEqual(limpio, { paraleloMax: 3 });
+});
