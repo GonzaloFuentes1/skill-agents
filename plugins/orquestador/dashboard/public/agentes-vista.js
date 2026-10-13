@@ -33,7 +33,21 @@ export function filtrarAgentes(datos, texto) {
   };
 }
 
-export const estadoPack = (p) => (!p.activos ? 'false' : p.activos >= p.total ? 'true' : 'mixed');
+// Grupo vacío: con un filtro activo no es "no tienes ninguno", es "nada coincide".
+export const textoVacio = (filtro, sinFiltro) => (String(filtro ?? '').trim() ? 'Ningún agente coincide con el filtro.' : sinFiltro);
+
+// Un agente escrito a mano es de solo lectura: se ofrece duplicarlo como propio en vez de editarlo.
+export function accionesDetalle(det) {
+  const aMano = !!det?.escritoAMano;
+  return {
+    duplicar: aMano ? 'Duplicar como propio' : 'Duplicar como Personalizado',
+    nota: aMano ? 'Escrito a mano: edítalo en su archivo.' : null,
+    editar: !!det?.editable,
+    eliminar: !!det?.editable,
+  };
+}
+
+export const estadoPack =(p) => (!p.activos ? 'false' : p.activos >= p.total ? 'true' : 'mixed');
 
 export function formularioVacio() {
   return {

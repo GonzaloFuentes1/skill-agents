@@ -78,7 +78,7 @@ test('una versión anterior queda "actualizable" y activarla de nuevo la reempla
   assert.doesNotMatch(readFileSync(archivoUsuario('gamma'), 'utf8'), /viejo/);
 });
 
-test('detalle: catálogo con prompt y secciones; integrado sin prompt; personalizado del usuario editable', () => {
+test('detalle: catálogo con prompt y secciones; integrado sin prompt; propio escrito a mano en solo lectura', () => {
   const { o, escribirPropio } = preparar();
   const d = detalleAgente('catalogo', 'alfa', o);
   assert.deepEqual([d.origen, d.id, d.nombre, d.pack, d.estado, d.editable], ['catalogo', 'alfa', 'Alfa', 'uno', 'inactivo', false]);
@@ -89,7 +89,7 @@ test('detalle: catálogo con prompt y secciones; integrado sin prompt; personali
   assert.match(i.aviso, /Prompt de Anthropic, no visible/);
   escribirPropio('mi-agente', cuerpoAgente('mi-agente'));
   const p = detalleAgente('usuario', 'mi-agente', o);
-  assert.deepEqual([p.editable, p.alcance, p.nombre], [true, 'usuario', 'Mi Agente']);
+  assert.deepEqual([p.editable, p.escritoAMano, p.alcance, p.nombre], [false, true, 'usuario', 'Mi Agente']);
   assert.deepEqual(listarAgentes(o).personalizados.map((a) => [a.id, a.alcance, a.chocaConCatalogo]), [['mi-agente', 'usuario', false]]);
   lanza(() => detalleAgente('proyecto', 'mi-agente', o), 400);
   lanza(() => detalleAgente('raro', 'mi-agente', o), 400);

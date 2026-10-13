@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   slugAgente, validarAgente, construirArchivo, seccionesDe, crearPersonalizado, editarPersonalizado, eliminarPersonalizado,
-  activarCatalogo, listarAgentes, redactarPrompt, REGLAS_CRITICAS,
+  activarCatalogo, listarAgentes, redactarPrompt, REGLAS_CRITICAS, MARCADOR_PERSONALIZADO, detalleAgente,
 } from '../plugins/orquestador/dashboard/agentes.mjs';
 import { ErrorConversacion } from '../plugins/orquestador/dashboard/conversaciones.mjs';
 import { parsearFrontmatter } from '../plugins/orquestador/scripts/lib/frontmatter.mjs';
@@ -154,4 +154,42 @@ test('redactar: tiempo agotado da 504; datos inválidos dan 400 sin lanzar proce
   await assert.rejects(redactarPrompt({ ...pedido, nombre: '' }, { env, spawnFn }), (e) => e.status === 400);
   await assert.rejects(redactarPrompt({ ...pedido, modelo: 'gpt' }, { env, spawnFn }), (e) => e.status === 400);
   assert.equal(invocaciones().length, 0);
+});
+
+test('marcador personalizado: crear lo escribe, editar lo conserva y el listado los marca editables', () => {
+  const { o, env } = preparar();
+  crearPersonalizado(campos(), o);
+  const ruta = join(rutaAgentesUsuario(env), 'investigador-rl.md');
+  assert.ok(readFileSync(ruta, 'utf8').includes(MARCADOR_PERSONALIZADO));
+  const d = editarPersonalizado('investigador-rl', campos({ esfuerzo: 'xhigh' }), o);
+  assert.ok(readFileSync(ruta, 'utf8').includes(MARCADOR_PERSONALIZADO));
+  assert.doesNotMatch(d.prompt, /orquestador:personalizado/, 'el marcador no se muestra en el prompt');
+  assert.deepEqual(seccionesDe(parsearFrontmatter(readFileSync(ruta, 'utf8')).cuerpo), campos().secciones);
+  assert.deepEqual(listarAgentes(o).personalizados.map((a) => [a.id, a.editable, a.escritoAMano]), [['investigador-rl', true, false]]);
+});
+
+test('escritos a mano: solo lectura; editar o eliminar da 409 y el archivo queda byte a byte igual', () => {
+  const { o, env } = preparar();
+  const dir = rutaAgentesUsuario(env);
+  mkdirSync(dir, { recursive: true });
+  const ruta = join(dir, 'mio-a-mano.md');
+  const original = '---\r\nname: mio-a-mano\r\ndescription: Mi agente escrito a mano con su propio formato.\r\nmodel: opus\r\n---\r\n\r\nInstrucciones libres, sin secciones.\r\n';
+  writeFileSync(ruta, original);
+  const l = listarAgentes(o).personalizados;
+  assert.deepEqual(l.map((a) => [a.id, a.editable, a.escritoAMano]), [['mio-a-mano', false, true]]);
+  const det = detalleAgente('usuario', 'mio-a-mano', o);
+  assert.deepEqual([det.editable, det.escritoAMano], [false, true]);
+  lanza(() => editarPersonalizado('mio-a-mano', campos(), o), 409, /escrito a mano/);
+  lanza(() => eliminarPersonalizado('mio-a-mano', { confirmar: true }, o), 409, /escrito a mano/);
+  assert.equal(readFileSync(ruta, 'utf8'), original);
+  assert.equal(existsSync(`${ruta}.bak`), false);
+});
+
+test('nombres de archivo fuera de formato: aparecen en la lista, sin detalle ni edición', () => {
+  const { o, env } = preparar();
+  const dir = rutaAgentesUsuario(env);
+  mkdirSync(dir, { recursive: true });
+  for (const f of ['CodeReviewer.md', 'my_agent.md', 'ok-agente.md']) writeFileSync(join(dir, f), `---\nname: ${f}\ndescription: Agente de prueba con nombre de archivo cualquiera.\n---\n\nCuerpo.\n`);
+  const l = listarAgentes(o).personalizados;
+  assert.deepEqual(l.map((a) => [a.id, a.fueraDeFormato, a.editable]).sort(), [['CodeReviewer', true, false], ['my_agent', true, false], ['ok-agente', false, false]]);
 });

@@ -285,6 +285,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .tarjeta-catalogo.seleccionada { border-color: var(--clay); box-shadow: 0 0 0 1px var(--clay); }
 .abrir-agente { display: flex; flex-direction: column; gap: 6px; width: 100%; min-height: 44px; padding: 6px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
 .abrir-agente:hover { background: var(--seleccion); }
+.abrir-agente.sin-detalle { cursor: default; }
+.abrir-agente.sin-detalle:hover { background: transparent; }
+.nota-tarjeta { padding: 0 6px; font-size: 12.5px; }
 .abrir-agente .desc { font-size: 13px; color: var(--texto-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .abrir-agente > .fila.tenue { justify-content: space-between; font-size: 12px; }
 .nombres { display: flex; flex-direction: column; flex: 1; min-width: 0; }

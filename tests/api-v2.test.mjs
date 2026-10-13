@@ -119,6 +119,11 @@ test('agentes: listar, activar uno y un pack, detalle y personalizados con confi
     assert.ok(existsSync(join(claude, 'agents', 'investigador-rl.md')));
     assert.equal((await post(base, '/api/agentes/personalizados/investigador-rl/eliminar', { confirmar: true }, cookie)).status, 200);
     assert.equal(existsSync(join(claude, 'agents', 'investigador-rl.md')), false);
+    // Un agente escrito a mano es de solo lectura: editarlo da 409 y el archivo no cambia.
+    writeFileSync(join(claude, 'agents', 'a-mano.md'), 'escrito a mano');
+    const r = await post(base, '/api/agentes/personalizados/a-mano', campos(), cookie);
+    assert.deepEqual([r.status, /escrito a mano/.test(r.json().error)], [409, true]);
+    assert.equal(readFileSync(join(claude, 'agents', 'a-mano.md'), 'utf8'), 'escrito a mano');
   } finally { await srv.detener(); }
 });
 

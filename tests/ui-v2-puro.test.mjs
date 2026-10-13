@@ -6,6 +6,7 @@ import {
 import { CLASES_RUBRICA, CLAVES_EDITABLES, CONFIG_DEFECTO, normalizarRubrica } from '../plugins/orquestador/scripts/lib/config.mjs';
 import {
   filtrarAgentes, estadoPack, slugAgente as slugFront, formularioVacio, desdeDetalle, alternarHerramienta, herramientaMarcada, cuerpoFormulario, rutaArchivo,
+  textoVacio, accionesDetalle,
 } from '../plugins/orquestador/dashboard/public/agentes-vista.js';
 import { slugAgente } from '../plugins/orquestador/dashboard/agentes.mjs';
 import { chatVacio, desdeHistorial, reducirChat } from '../plugins/orquestador/dashboard/public/chat-vista.js';
@@ -186,4 +187,21 @@ test('estado-vista: claseNodo, etiquetas de eventos, numeración de repetidos y 
 
 test('verificacion: un modelo real de familia desconocida se muestra tal cual', () => {
   assert.deepEqual(verificacion({ modelo: 'opus', resultado: { modeloReal: 'modelo-raro-1' } }), { texto: '⚠ modelo-raro-1', clase: 'e-error' });
+});
+
+test('agentes-vista: un escrito a mano se duplica como propio (id distinto) y no se edita', () => {
+  const det = { id: 'mio-a-mano', origen: 'usuario', nombre: 'Mio A Mano', description: 'Mío.', model: 'opus', tools: 'Read', alcance: 'usuario', editable: false, escritoAMano: true };
+  assert.deepEqual(accionesDetalle(det), { duplicar: 'Duplicar como propio', nota: 'Escrito a mano: edítalo en su archivo.', editar: false, eliminar: false });
+  const f = desdeDetalle(det, { duplicar: true });
+  assert.equal(f.editando, null);
+  assert.equal(slugFront(f.nombre), 'mio-a-mano-copia');
+  assert.deepEqual(accionesDetalle({ ...det, editable: true, escritoAMano: false }), { duplicar: 'Duplicar como Personalizado', nota: null, editar: true, eliminar: true });
+  assert.deepEqual(accionesDetalle({ id: 'alfa', origen: 'catalogo', editable: false }), { duplicar: 'Duplicar como Personalizado', nota: null, editar: false, eliminar: false });
+});
+
+test('agentes-vista: con filtro activo un grupo vacío dice que nada coincide', () => {
+  assert.equal(textoVacio('', 'Aún no tienes agentes personalizados.'), 'Aún no tienes agentes personalizados.');
+  assert.equal(textoVacio('  ', 'Aún no tienes agentes personalizados.'), 'Aún no tienes agentes personalizados.');
+  assert.equal(textoVacio('rl', 'Aún no tienes agentes personalizados.'), 'Ningún agente coincide con el filtro.');
+  assert.equal(textoVacio('', null), null);
 });

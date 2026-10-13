@@ -3,10 +3,12 @@ import { el, boton, interruptor, segmentado, confirmar, chipModelo } from './dom
 import {
   TEXTO_ESTADO, HERRAMIENTAS_FORM, MODELOS_AGENTE, ESFUERZOS_AGENTE, SECCIONES_FORM,
   filtrarAgentes, estadoPack, formularioVacio, desdeDetalle, alternarHerramienta, herramientaMarcada, cuerpoFormulario, rutaArchivo,
+  textoVacio, accionesDetalle,
 } from './agentes-vista.js';
 
 let ctx = null;              // { api, toast, conversacionActual }
 let datos = null;            // GET /api/agentes
+let errorCarga = null;       // mensaje si GET /api/agentes falló (sin datos previos se muestra con "Reintentar")
 let filtro = '';
 let detalle = null;          // GET /api/agentes/:origen/:id
 let form = formularioVacio();
@@ -20,7 +22,13 @@ const consulta = () => { const c = ctx.conversacionActual(); return c ? `?conver
 const conFoco = (nodo, clave) => { nodo.dataset.foco = clave; return nodo; };
 
 export async function abrirAgentes() {
-  try { datos = await ctx.api('GET', `/api/agentes${consulta()}`); } catch (e) { ctx.toast(e.message); }
+  try {
+    datos = await ctx.api('GET', `/api/agentes${consulta()}`);
+    errorCarga = null;
+  } catch (e) {
+    errorCarga = e.message;
+    if (datos) ctx.toast(e.message); // con datos previos se siguen mostrando; sin ellos, la lista muestra el error
+  }
   render();
 }
 
@@ -48,15 +56,21 @@ function render() {
 
 // ---------- catálogo ----------
 function renderLista(contenedor) {
-  if (!datos) { contenedor.replaceChildren(el('p', 'tenue', 'Cargando agentes…')); return; }
+  if (!datos) {
+    if (!errorCarga) { contenedor.replaceChildren(el('p', 'tenue', 'Cargando agentes…')); return; }
+    const reintentar = conFoco(boton('Reintentar', 'boton-secundario', () => { errorCarga = null; renderLista(contenedor); abrirAgentes(); }), 'reintentar-agentes');
+    contenedor.replaceChildren(el('p', 'aviso e-error', `No se pudieron cargar los agentes: ${errorCarga}`), reintentar);
+    return;
+  }
   const d = filtrarAgentes(datos, filtro);
   const hijos = [];
   if (filtro && !d.packs.length) hijos.push(el('p', 'tenue', 'Ningún agente del catálogo coincide con el filtro.'));
   for (const p of d.packs) hijos.push(grupoPack(p));
   hijos.push(
-    grupoSimple('Personalizados', '~/.claude/agents/ y .claude/agents/ del proyecto abierto', d.personalizados.map((a) => tarjetaAgente(a, a.alcance)), 'Aún no tienes agentes personalizados. Crea uno con el formulario.'),
-    grupoSimple('Del Plugin', 'plugins/orquestador/agents/', d.plugin.map((a) => tarjetaAgente(a, 'plugin'))),
-    grupoSimple('Integrados de Claude Code', 'Prompt de Anthropic, no visible', d.integrados.map((a) => tarjetaAgente(a, 'integrado'))),
+    grupoSimple('Personalizados', '~/.claude/agents/ y .claude/agents/ del proyecto abierto', d.personalizados.map((a) => tarjetaAgente(a, a.alcance)),
+      textoVacio(filtro, 'Aún no tienes agentes personalizados. Crea uno con el formulario.')),
+    grupoSimple('Del Plugin', 'plugins/orquestador/agents/', d.plugin.map((a) => tarjetaAgente(a, 'plugin')), textoVacio(filtro, null)),
+    grupoSimple('Integrados de Claude Code', 'Prompt de Anthropic, no visible', d.integrados.map((a) => tarjetaAgente(a, 'integrado')), textoVacio(filtro, null)),
   );
   contenedor.replaceChildren(...hijos);
 }
@@ -95,13 +109,14 @@ function grupoSimple(titulo, ruta, tarjetas, vacio = null) {
 // La tarjeta no anida botones: "abrir" es un botón y el interruptor es otro, hermanos dentro de un <article>.
 function tarjetaAgente(a, origen) {
   const art = el('article', `tarjeta-catalogo${detalle?.id === a.id && detalle?.origen === origen ? ' seleccionada' : ''}`);
-  const abrir = conFoco(boton(null, 'abrir-agente', () => verDetalle(origen, a.id)), `ver:${origen}:${a.id}`);
+  // Un nombre de archivo fuera de formato (CodeReviewer.md, my_agent.md) no tiene detalle: la tarjeta no es un botón.
+  const abrir = a.fueraDeFormato ? el('div', 'abrir-agente sin-detalle') : conFoco(boton(null, 'abrir-agente', () => verDetalle(origen, a.id)), `ver:${origen}:${a.id}`);
   const cab = el('span', 'fila');
   const nombres = el('span', 'nombres');
   nombres.append(el('strong', null, a.nombre ?? a.id), el('span', 'mono tenue', a.id));
   cab.append(el('span', 'inicial', (a.nombre ?? a.id).charAt(0).toUpperCase()), nombres, chipModelo(a.model, a.effort));
   const pie = el('span', 'fila tenue');
-  pie.append(el('span', 'mono', a.tools ?? ''), el('span', null, 'Ver prompt →'));
+  pie.append(el('span', 'mono', a.tools ?? ''), el('span', null, a.fueraDeFormato ? '' : 'Ver prompt →'));
   abrir.append(cab, el('span', 'desc', a.description ?? ''), pie);
   art.append(abrir);
   if (origen === 'catalogo') {
@@ -111,7 +126,10 @@ function tarjetaAgente(a, origen) {
     fila.append(interruptor(`Activar ${a.nombre}`, a.estado === 'activo' || a.estado === 'actualizable', (v) => cambiarAgente(a, v), { deshabilitado: a.estado === 'conflicto' }));
     art.append(fila);
   } else if (a.alcance) {
-    art.append(el('span', 'tenue', a.alcance === 'proyecto' ? 'Solo este repo' : 'Todos mis proyectos'));
+    const notas = [a.alcance === 'proyecto' ? 'Solo este repo' : 'Todos mis proyectos'];
+    if (a.fueraDeFormato) notas.push('Nombre fuera de formato: renombra el archivo (minúsculas y guiones) para ver su detalle');
+    else if (a.escritoAMano) notas.push('Escrito a mano');
+    art.append(el('span', 'tenue nota-tarjeta', notas.join(' · ')));
   }
   return art;
 }
@@ -156,15 +174,13 @@ function vistaDetalle() {
   cuando.append(el('span', 'versalita tenue', 'Cuándo lo usa el orquestador'), el('p', null, d.description ?? ''));
   const prompt = el('div', 'bloque');
   prompt.append(el('span', 'versalita tenue', 'Prompt del agente'), d.prompt ? el('pre', 'prompt', d.prompt) : el('p', 'tenue', d.aviso ?? 'Sin prompt visible.'));
+  const acc = accionesDetalle(d);
   const acciones = el('div', 'acciones');
-  acciones.append(boton('Duplicar como Personalizado', 'boton-secundario', () => { form = desdeDetalle(d, { duplicar: true }); detalle = null; errorForm = null; render(); }));
-  if (d.editable) {
-    acciones.append(
-      boton('Editar', 'boton-secundario', () => { form = desdeDetalle(d); detalle = null; errorForm = null; render(); }),
-      boton('Eliminar', 'boton-peligro', () => eliminar(d)),
-    );
-  }
+  acciones.append(boton(acc.duplicar, 'boton-secundario', () => { form = desdeDetalle(d, { duplicar: true }); detalle = null; errorForm = null; render(); }));
+  if (acc.editar) acciones.append(boton('Editar', 'boton-secundario', () => { form = desdeDetalle(d); detalle = null; errorForm = null; render(); }));
+  if (acc.eliminar) acciones.append(boton('Eliminar', 'boton-peligro', () => eliminar(d)));
   c.append(nuevo, cab, datosG, cuando, prompt, acciones);
+  if (acc.nota) c.append(el('p', 'tenue', acc.nota));
   return c;
 }
 

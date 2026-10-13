@@ -27,6 +27,10 @@ export function leerMarcador(texto) {
   const m = MARCADOR.exec(String(texto ?? ''));
   return m ? { id: m[1], version: m[2] } : null;
 }
+// Los agentes creados (o editados) desde el dashboard llevan este marcador; un .md sin marcador es "escrito a mano" y es de solo lectura.
+export const MARCADOR_PERSONALIZADO = '<!-- orquestador:personalizado -->';
+export const esPersonalizado = (texto) => String(texto ?? '').includes(MARCADOR_PERSONALIZADO);
+const sinMarcadorPersonalizado = (texto) => String(texto ?? '').split(MARCADOR_PERSONALIZADO).join('');
 export const nombreDesdeId = (id) => String(id).split('-').filter(Boolean).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
 
 const opcionesDe = ({ env = process.env, raizPlugin = RAIZ_PLUGIN, cwdProyecto = null } = {}) => ({ env, raizPlugin, cwdProyecto });
@@ -84,8 +88,10 @@ export const idsReservados = (raizPlugin = RAIZ_PLUGIN) => new Set([
   ...INTEGRADOS.map((a) => a.id.toLowerCase()),
 ]);
 
+const idValido = (id) => typeof id === 'string' && id.length >= 3 && id.length <= 40 && ID_AGENTE.test(id);
+
 export function validarId(id) {
-  if (typeof id !== 'string' || id.length < 3 || id.length > 40 || !ID_AGENTE.test(id)) throw new ErrorConversacion(400, 'Identificador de agente inválido');
+  if (!idValido(id)) throw new ErrorConversacion(400, 'Identificador de agente inválido');
   return id;
 }
 
@@ -154,7 +160,10 @@ function personalizadosEn(dir, alcance, catalogo) {
     let a;
     try { a = leerArchivoAgente(join(dir, f)); } catch { continue; }
     if (leerMarcador(a.texto)) continue; // activado desde el catálogo: aparece en su pack
-    out.push(resumen({ id, ...a }, { alcance, chocaConCatalogo: catalogo.has(id) }));
+    // Un nombre de archivo que no es un id válido (CodeReviewer.md, my_agent.md) se lista, pero sin detalle ni edición.
+    const fueraDeFormato = !idValido(id);
+    const escritoAMano = !esPersonalizado(a.texto);
+    out.push(resumen({ id, ...a }, { alcance, chocaConCatalogo: catalogo.has(id), editable: !fueraDeFormato && !escritoAMano, escritoAMano, fueraDeFormato }));
   }
   return out;
 }
@@ -211,9 +220,10 @@ export function detalleAgente(origen, id, opciones = {}) {
   }
   if (!a) throw new ErrorConversacion(404, 'No existe ese agente');
   const propio = origen === 'usuario' || origen === 'proyecto';
+  const editable = propio && esPersonalizado(a.texto);
   return {
-    origen, ...resumen(a), ...extra, archivo, prompt: a.cuerpo.trim(), persona: extraerPersona(a.cuerpo),
-    secciones: seccionesDe(a.cuerpo), editable: propio, alcance: propio ? origen : null,
+    origen, ...resumen(a), ...extra, archivo, prompt: sinMarcadorPersonalizado(a.cuerpo).trim(), persona: extraerPersona(a.cuerpo),
+    secciones: seccionesDe(a.cuerpo), editable, escritoAMano: propio && !editable, alcance: propio ? origen : null,
   };
 }
 
@@ -277,7 +287,7 @@ export function construirArchivo({ id, descripcion, modelo, esfuerzo, herramient
     `tools: ${herramientas.join(', ')}`, `color: ${COLOR_POR_MODELO[modelo]}`, '---', '',
     `Persona: ${primeraFrase(secciones.rol)}`, '',
     ...SECCIONES.flatMap(([k, titulo]) => [`## ${titulo}`, '', secciones[k], '']),
-    REGLAS_CRITICAS, '',
+    REGLAS_CRITICAS, '', MARCADOR_PERSONALIZADO, '',
   ].join('\n');
 }
 
@@ -304,10 +314,13 @@ export function crearPersonalizado(campos, opciones = {}) {
   return detalleAgente(limpio.alcance, id, o);
 }
 
+// Solo los agentes creados desde el dashboard se editan o eliminan aquí: uno escrito a mano nunca se reescribe.
 function rutaPropia(id, alcance, o) {
   const ruta = join(dirAlcance(alcance, o.env, o.cwdProyecto), `${id}.md`);
   if (!existsSync(ruta)) throw new ErrorConversacion(404, 'No existe ese agente personalizado');
-  if (leerMarcador(readFileSync(ruta, 'utf8'))) throw new ErrorConversacion(409, `${id} viene del catálogo; duplícalo como personalizado para cambiarlo`);
+  const texto = readFileSync(ruta, 'utf8');
+  if (leerMarcador(texto)) throw new ErrorConversacion(409, `${id} viene del catálogo; duplícalo como personalizado para cambiarlo`);
+  if (!esPersonalizado(texto)) throw new ErrorConversacion(409, `${id} fue escrito a mano: edítalo en su archivo o duplícalo como propio`);
   return ruta;
 }
 
