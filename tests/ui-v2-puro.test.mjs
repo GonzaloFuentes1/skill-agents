@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CLASES_RUBRICA as CLASES_FRONT, CLAVES_CONFIG, formularioDesde, reducirFormulario, hayCambios, parcialAGuardar, autoModoDesde, costoVisible, fijar, obtener,
+  accionPrecio,
 } from '../plugins/orquestador/dashboard/public/config-vista.js';
 import { CLASES_RUBRICA, CLAVES_EDITABLES, CONFIG_DEFECTO, normalizarRubrica } from '../plugins/orquestador/scripts/lib/config.mjs';
 import {
@@ -217,4 +218,30 @@ test('actividad: el modelo y el costo de la conversación del chat solo valen pa
   assert.deepEqual(orquestadorDeSesion(null, 's1', null), { modelo: null, costoUSD: null });
   // Misma sesión sin modelo informado: cae al del servidor; costo ausente cuenta como 0.
   assert.deepEqual(orquestadorDeSesion({ sessionId: 's1' }, 's1', 'opus'), { modelo: 'opus', costoUSD: 0 });
+});
+
+test('precios: un campo vacío no se guarda como 0; se ignora y queda el valor guardado', () => {
+  let f = formularioDesde(configBase(), CLAVES_CONFIG);
+  const original = f.original.precios.opus.entrada;
+  f = reducirFormulario(f, accionPrecio(f, 'opus', 'entrada', '7.5'));
+  assert.equal(f.actual.precios.opus.entrada, 7.5);
+  f = reducirFormulario(f, accionPrecio(f, 'opus', 'entrada', ''));
+  assert.equal(f.actual.precios.opus.entrada, original);
+  assert.equal(hayCambios(f), false, 'vaciar el campo no deja cambios pendientes');
+  f = reducirFormulario(f, accionPrecio(f, 'opus', 'salida', '   '));
+  assert.deepEqual(parcialAGuardar(f), {});
+  f = reducirFormulario(f, accionPrecio(f, 'opus', 'salida', '0'));
+  assert.equal(f.actual.precios.opus.salida, 0, 'un 0 escrito a propósito sí se guarda');
+});
+
+test('chat: una denegación que viene del historial queda igual que una nueva, con "Autorizar y reintentar"', () => {
+  const d = { id: 'd1', herramienta: 'Bash', entrada: { command: 'git push --force' }, motivo: 'Git destructivo', ts: '2026-10-13T10:00:00Z' };
+  const nueva = reducirChat(chatVacio(), { tipo: 'chat:denegado', conversacion: 'c1', ...d });
+  // El servidor podría mandar otros campos (incluso un "tipo" propio): no deben pisar el tipo del evento.
+  const historial = desdeHistorial({ conversacion: { estado: 'lista' }, mensajes: [], denegados: [{ ...d, tipo: 'denegado' }] });
+  assert.deepEqual(historial.mensajes, nueva.mensajes);
+  for (const alBloquear of ['preguntar', undefined]) {
+    assert.equal(modeloDenegacion(historial.mensajes[0].bloques[0], alBloquear).accion?.texto, 'Autorizar y reintentar');
+  }
+  assert.equal(modeloDenegacion(historial.mensajes[0].bloques[0], 'denegar').accion, null);
 });

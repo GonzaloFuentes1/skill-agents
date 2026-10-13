@@ -78,6 +78,13 @@ export function reducirFormulario(f, a) {
   }
 }
 
+// Acción para una celda de precios. Un campo vacío nunca se guarda como 0: se ignora y la celda vuelve al valor guardado.
+export function accionPrecio(f, modelo, campo, texto) {
+  const ruta = ['precios', modelo, campo];
+  const t = String(texto ?? '').trim();
+  return { tipo: 'fijar', ruta, valor: t === '' ? obtener(f.original, ruta) : Number(t) };
+}
+
 export function autoModoDesde(e) {
   const p = e?.personalizadas ?? {};
   return {

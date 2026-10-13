@@ -15,7 +15,7 @@ export function leerJsonUsuario(ruta) {
     texto = readFileSync(ruta, 'utf8');
   } catch (e) {
     if (e.code === 'ENOENT') return { existe: false, datos: null, error: null };
-    return { existe: true, datos: null, error: `No se pudo leer ${ruta}: ${e.message}` };
+    return { existe: true, datos: null, error: `No se pudo leer ${ruta}: ${e.message}`, codigo: e.code ?? 'EIO' };
   }
   try {
     return { existe: true, datos: JSON.parse(sinBom(texto)), error: null };

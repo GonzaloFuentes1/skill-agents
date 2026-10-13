@@ -59,7 +59,9 @@ function renderLista(contenedor) {
   if (!datos) {
     if (!errorCarga) { contenedor.replaceChildren(el('p', 'tenue', 'Cargando agentes…')); return; }
     const reintentar = conFoco(boton('Reintentar', 'boton-secundario', () => { errorCarga = null; renderLista(contenedor); abrirAgentes(); }), 'reintentar-agentes');
-    contenedor.replaceChildren(el('p', 'aviso e-error', `No se pudieron cargar los agentes: ${errorCarga}`), reintentar);
+    const caja = el('div', 'error-carga');
+    caja.append(el('p', 'aviso e-error', `No se pudieron cargar los agentes: ${errorCarga}`), reintentar);
+    contenedor.replaceChildren(caja);
     return;
   }
   const d = filtrarAgentes(datos, filtro);

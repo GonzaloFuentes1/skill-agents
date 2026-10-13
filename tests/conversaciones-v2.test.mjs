@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { crearGestor } from '../plugins/orquestador/dashboard/conversaciones.mjs';
+import { crearGestor, leerLista } from '../plugins/orquestador/dashboard/conversaciones.mjs';
 import { abrirProceso, crearNormalizador } from '../plugins/orquestador/dashboard/proceso-claude.mjs';
 import { rutaConversaciones } from '../plugins/orquestador/scripts/lib/rutas.mjs';
 import { ESPERAR_USUARIO, ESPERAR_RESPUESTA, ESPERAR_PEDIDO, INIT, texto, permiso, fin, finInterrumpido, turnoSimple, denegado } from './fixtures/guiones.mjs';
@@ -258,4 +258,30 @@ test('cerrar, enviar e interrumpir: Detener descarta el mensaje que esperaba', a
   assert.equal(leerRegistro().filter((r) => r.argv).length, 1);
   assert.equal(g.hayProcesos(), false);
   assert.equal(g.obtener(c.id).estado, 'inactiva');
+});
+
+test('conversaciones.json bloqueado (EBUSY/EPERM/EACCES): se reintenta y, si sigue, se lanza sin respaldarlo ni pisarlo', () => {
+  const { env } = entorno(turnoSimple());
+  const ruta = rutaConversaciones(env);
+  writeFileSync(ruta, '[{"id":"c1"}]');
+  for (const codigo of ['EBUSY', 'EPERM', 'EACCES']) {
+    let llamadas = 0;
+    const bloqueado = () => { llamadas++; return { existe: true, datos: null, error: `No se pudo leer ${ruta}: ${codigo}`, codigo }; };
+    assert.throws(() => leerLista(env, { leer: bloqueado, intentos: 3, esperaMs: 1 }), (e) => new RegExp(codigo).test(e.message) && /no se sobrescribe/.test(e.message), codigo);
+    assert.equal(llamadas, 3, `${codigo}: reintenta`);
+  }
+  assert.equal(existsSync(`${ruta}.corrupto`), false);
+  assert.equal(readFileSync(ruta, 'utf8'), '[{"id":"c1"}]');
+  // Un bloqueo breve se supera con el reintento.
+  let n = 0;
+  const breve = (r) => (++n < 2 ? { existe: true, datos: null, error: 'ocupado', codigo: 'EBUSY' } : { existe: true, datos: JSON.parse(readFileSync(r, 'utf8')), error: null });
+  assert.deepEqual(leerLista(env, { leer: breve, intentos: 3, esperaMs: 1 }), [{ id: 'c1' }]);
+});
+
+test('leerJsonUsuario informa el código de un error de lectura', async () => {
+  const { leerJsonUsuario } = await import('../plugins/orquestador/scripts/lib/archivos.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'orq-codigo-'));
+  const r = leerJsonUsuario(dir); // un directorio: la lectura falla por E/S, no por JSON
+  assert.equal(r.existe, true);
+  assert.equal(typeof r.codigo, 'string');
 });

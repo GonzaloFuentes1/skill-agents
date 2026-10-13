@@ -43,19 +43,28 @@ export async function ramaDe(cwd) {
   } catch { return null; }
 }
 
-// Un conversaciones.json dañado se respalda en .corrupto antes de empezar de cero: nunca se pierde en silencio.
-function leerLista(env) {
+const dormir = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+// Bloqueos de lectura pasajeros (antivirus, OneDrive, otro proceso): el archivo está bien, solo no se pudo leer ahora.
+const LECTURA_BLOQUEADA = new Set(['EBUSY', 'EPERM', 'EACCES']);
+
+// Un conversaciones.json dañado (JSON inválido) se respalda en .corrupto antes de empezar de cero: nunca se pierde en silencio.
+// Uno bloqueado no está dañado: se reintenta y, si sigue bloqueado, se lanza el error, porque empezar de cero lo pisaría al guardar.
+export function leerLista(env, { leer = leerJsonUsuario, intentos = 5, esperaMs = 100 } = {}) {
   const ruta = rutaConversaciones(env);
-  const { existe, datos, error } = leerJsonUsuario(ruta);
+  let r = leer(ruta);
+  for (let i = 1; i < intentos && LECTURA_BLOQUEADA.has(r.codigo); i++) { dormir(esperaMs); r = leer(ruta); }
+  const { existe, datos, error, codigo } = r;
   if (!existe) return [];
   if (!error && Array.isArray(datos)) return datos;
+  if (LECTURA_BLOQUEADA.has(codigo)) {
+    throw new Error(`No se pudo leer ${ruta} (${codigo}) y no se sobrescribe. Cierra el programa que lo bloquea y vuelve a abrir el dashboard.`);
+  }
   let respaldo = null;
   try { respaldo = respaldar(ruta, '.corrupto'); } catch { /* p. ej. la ruta es un directorio */ }
   console.error(`No se pudo leer ${ruta}${respaldo ? `; se respaldó en ${respaldo}` : ''} y se empieza de cero.`);
   return [];
 }
 
-const dormir = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const INTENTOS_GUARDAR = 3;
 
 export function crearGestor({

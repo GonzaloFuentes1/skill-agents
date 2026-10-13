@@ -74,3 +74,34 @@ test('tema.css: interruptores, opciones, contadores y botones de quitar con obje
   assert.match(css, /\.tabla-desplazable\s*\{[^}]*overflow-x:\s*auto/);
   assert.match(css, /\.pestanas\s*\{[^}]*overflow-x:\s*auto/); // 4 pestañas en 390 px: se desplaza la barra, no la página
 });
+
+// Contraste WCAG entre dos colores #RRGGBB.
+const luminancia = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contraste = (a, b) => { const [x, y] = [luminancia(a), luminancia(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+const token = (bloque, nombre) => new RegExp(String.raw`(?<![\w-])--${nombre}:\s*(#[0-9A-Fa-f]{6})`).exec(bloque)?.[1];
+
+test('tema.css: el interruptor apagado se distingue de su fondo (≥ 3:1) en tema oscuro y claro', () => {
+  const css = leer('tema.css');
+  const regla = /\.interruptor::before\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  const borde = /border:\s*[\d.]+px solid var\(--([\w-]+)\)/.exec(regla)?.[1];
+  assert.ok(borde, 'la pista del interruptor tiene un borde con un token de color');
+  const oscuro = css.slice(css.indexOf(':root, [data-tema="oscuro"]'), css.indexOf('[data-tema="claro"]'));
+  const claro = css.slice(css.indexOf('[data-tema="claro"]'), css.indexOf('[hidden]'));
+  for (const [nombre, bloque] of [['oscuro', oscuro], ['claro', claro]]) {
+    for (const fondo of ['fondo', 'tarjeta', 'panel']) {
+      const c = contraste(token(bloque, borde), token(bloque, fondo));
+      assert.ok(c >= 3, `${nombre}: --${borde} contra --${fondo} da ${c.toFixed(2)}:1`);
+    }
+  }
+});
+
+test('tema.css: el título de la cabecera no se trunca por un margen negativo en el botón', () => {
+  const css = leer('tema.css');
+  const boton = /\.titulo-editable\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.doesNotMatch(boton, /margin(-left)?:\s*-/, 'con max-width: 100%, un margen negativo en el botón lo recorta');
+  assert.match(boton, /text-overflow:\s*ellipsis/, 'en pantallas angostas sigue abreviando con …');
+  assert.match(css, /\.fila-titulo h1\s*\{[^}]*margin:\s*0 0 0 -6px/);
+});

@@ -3,7 +3,7 @@
 import { el, boton, interruptor, segmentado, confirmar, capitalizar } from './dom.js';
 import {
   CLAVES_CONFIG, EJEMPLOS_RUBRICA, MODELOS, ESFUERZOS, LIMITES,
-  formularioDesde, reducirFormulario, hayCambios, parcialAGuardar, autoModoDesde,
+  formularioDesde, reducirFormulario, hayCambios, parcialAGuardar, autoModoDesde, accionPrecio,
 } from './config-vista.js';
 
 const SECCIONES = [['auto', 'Modo Automático'], ['limites', 'Límites'], ['orquestador', 'Orquestador'], ['rubrica', 'Rúbrica'], ['visibilidad', 'Visibilidad'], ['precios', 'Precios'], ['git', 'Git y Dashboard']];
@@ -50,19 +50,43 @@ function cambiar(cual, accion) {
   render();
 }
 
+// Cambio desde un campo de texto o de precio: actualiza el estado al escribir, sin re-render (el foco y el cursor no se pierden),
+// y solo refresca la barra de cambios. Así un clic en "Guardar" al salir del campo no cae en un botón que ya se reemplazó.
+function cambiarEnSitio(cual, accion, claveError = accion.ruta[0]) {
+  const quitarError = (f) => { const errores = { ...f.errores }; delete errores[claveError]; return { ...f, errores }; };
+  if (cual === 'cfg') cfg = quitarError(reducirFormulario(cfg, accion));
+  else auto = quitarError(reducirFormulario(auto, accion));
+  mensaje = null;
+  const raiz = document.getElementById('vista-config');
+  raiz.querySelector('.barra-cambios')?.replaceWith(barraCambios());
+  raiz.querySelector(`[data-error="${CSS.escape(claveError)}"]`)?.remove();
+}
+
 const conFoco = (nodo, clave) => { nodo.dataset.foco = clave; return nodo; };
-const errorCampo = (f, k) => (f?.errores?.[k] ? el('p', 'error-campo', f.errores[k]) : null);
+function errorCampo(f, k) {
+  if (!f?.errores?.[k]) return null;
+  const p = el('p', 'error-campo', f.errores[k]);
+  p.dataset.error = k;
+  return p;
+}
 
 function render() {
   const raiz = document.getElementById('vista-config');
   if (!cfg || !auto) return;
   const foco = document.activeElement?.dataset?.foco ?? null;
-  const nav = el('nav', 'config-nav');
-  nav.setAttribute('aria-label', 'Secciones de la configuración');
-  for (const [id, titulo] of SECCIONES) { const a = el('a', null, titulo); a.href = `#cfg-${id}`; nav.append(a); }
-  const cuerpo = el('div', 'config-cuerpo');
-  cuerpo.append(barraCambios(), seccionAuto(), seccionLimites(), seccionOrquestador(), seccionRubrica(), seccionVisibilidad(), seccionPrecios(), seccionGit());
-  raiz.replaceChildren(nav, cuerpo);
+  try {
+    const nav = el('nav', 'config-nav');
+    nav.setAttribute('aria-label', 'Secciones de la configuración');
+    for (const [id, titulo] of SECCIONES) { const a = el('a', null, titulo); a.href = `#cfg-${id}`; nav.append(a); }
+    const cuerpo = el('div', 'config-cuerpo');
+    cuerpo.append(barraCambios(), seccionAuto(), seccionLimites(), seccionOrquestador(), seccionRubrica(), seccionVisibilidad(), seccionPrecios(), seccionGit());
+    raiz.replaceChildren(nav, cuerpo);
+  } catch (e) {
+    // Un valor que la vista no sabe dibujar no deja la pestaña en "Cargando configuración…": se explica el problema.
+    console.error(e);
+    raiz.replaceChildren(el('p', 'aviso e-error', `No se pudo mostrar la configuración: ${e.message}. Revisa ~/.claude/orquestador/config.json y vuelve a abrir la pestaña.`));
+    return;
+  }
   if (foco) raiz.querySelector(`[data-foco="${CSS.escape(foco)}"]`)?.focus();
 }
 
@@ -150,7 +174,7 @@ function campoTexto(titulo, valor, ayuda, alCambiar, { deshabilitado = false, cl
   i.value = valor ?? '';
   i.placeholder = ayuda;
   i.disabled = deshabilitado;
-  i.addEventListener('change', () => alCambiar(i.value)); // al salir del campo o con Enter: no se pierde el foco al escribir
+  i.addEventListener('input', () => alCambiar(i.value)); // alCambiar usa cambiarEnSitio: sin re-render mientras se escribe
   l.append(i);
   return l;
 }
@@ -269,7 +293,7 @@ function seccionAuto() {
   entorno.append(...[
     listaEditable('auto', 'Repos', a.entorno.repos, ['entorno', 'repos'], 'github.com/tu-usuario/*', { deshabilitado: bloqueado, error: errorCampo(auto, 'repos') }),
     listaEditable('auto', 'Dominios', a.entorno.dominios, ['entorno', 'dominios'], 'tu-dominio.com', { deshabilitado: bloqueado, error: errorCampo(auto, 'dominios') }),
-    campoTexto('Organización', a.entorno.organizacion, 'Sin configurar', (v) => cambiar('auto', { tipo: 'fijar', ruta: ['entorno', 'organizacion'], valor: v }), { deshabilitado: bloqueado, clave: 'organizacion' }),
+    campoTexto('Organización', a.entorno.organizacion, 'Sin configurar', (v) => cambiarEnSitio('auto', { tipo: 'fijar', ruta: ['entorno', 'organizacion'], valor: v }, 'organizacion'), { deshabilitado: bloqueado, clave: 'organizacion' }),
     errorCampo(auto, 'organizacion'),
   ].filter(Boolean)); // append(null) insertaría el texto "null"
   const otras = datosAuto?.personalizadas?.otrasEntorno ?? [];
@@ -432,7 +456,8 @@ function seccionPrecios() {
       i.step = 'any';
       i.value = String(cfg.actual.precios?.[m]?.[k] ?? '');
       i.setAttribute('aria-label', `${t} de ${capitalizar(m)}`);
-      i.addEventListener('change', () => cambiar('cfg', { tipo: 'fijar', ruta: ['precios', m, k], valor: Number(i.value) }));
+      i.placeholder = String(cfg.original.precios?.[m]?.[k] ?? ''); // vacío = se mantiene el valor guardado
+      i.addEventListener('input', () => cambiarEnSitio('cfg', accionPrecio(cfg, m, k, i.value)));
       td.append(i);
       tr.append(td);
     }
@@ -452,11 +477,11 @@ function seccionGit() {
     fila('Ramas protegidas', 'Nadie hace push directo ni force-push a estas ramas.',
       listaEditable('cfg', 'Ramas', c.ramasProtegidas, ['ramasProtegidas'], 'develop'), { error: errorCampo(cfg, 'ramasProtegidas') }),
     fila('Puerto del dashboard', 'Requiere reiniciar el dashboard.',
-      campoTexto('Puerto', String(c.puertoDashboard ?? ''), '4321', (v) => cambiar('cfg', { tipo: 'fijar', ruta: ['puertoDashboard'], valor: Number.parseInt(v, 10) }), { clave: 'puerto', tipo: 'number' }),
+      campoTexto('Puerto', String(c.puertoDashboard ?? ''), '4321', (v) => cambiarEnSitio('cfg', { tipo: 'fijar', ruta: ['puertoDashboard'], valor: Number.parseInt(v, 10) }), { clave: 'puerto', tipo: 'number' }),
       { error: errorCampo(cfg, 'puertoDashboard') }),
     fila('Modo remoto', 'Abre el dashboard desde otro equipo por una red privada como Tailscale. El enlace con token equivale a una contraseña. Requiere reiniciar el dashboard.',
       interruptor('Modo remoto', remoto.activo, (v) => cambiar('cfg', { tipo: 'fijar', ruta: ['remoto', 'activo'], valor: v }))),
-    remoto.activo ? campoTexto('Escuchar en (IP de la red privada)', remoto.escuchar, '100.x.y.z', (v) => cambiar('cfg', { tipo: 'fijar', ruta: ['remoto', 'escuchar'], valor: v.trim() }), { clave: 'escuchar' }) : null,
+    remoto.activo ? campoTexto('Escuchar en (IP de la red privada)', remoto.escuchar, '100.x.y.z', (v) => cambiarEnSitio('cfg', { tipo: 'fijar', ruta: ['remoto', 'escuchar'], valor: v.trim() }, 'remoto'), { clave: 'escuchar' }) : null,
     remoto.activo ? listaEditable('cfg', 'Hosts permitidos', remoto.hostsPermitidos, ['remoto', 'hostsPermitidos'], 'mi-pc.tailnet.ts.net') : null,
     errorCampo(cfg, 'remoto'),
   );

@@ -116,3 +116,36 @@ test('validarConfig: claves del prototipo (constructor, __proto__, toString) se 
   assert.deepEqual(errores, {});
   assert.deepEqual(limpio, { paraleloMax: 3 });
 });
+
+test('config: un config.json editado a mano con tipos inválidos cae al valor de fábrica por campo', () => {
+  const env = home();
+  writeFileSync(rutaConfig(env), JSON.stringify({
+    ramasProtegidas: null, paraleloMax: '3', fableMaxPorSesion: 1, modelosOrquestador: 'opus', conversacionesMax: 2.5, puertoDashboard: '4321',
+    modoPermisoDefecto: 'siempre', alBloquear: 7, mostrarCosto: 'no', alertasModelo: false, rutaClaude: 42, miClave: { x: 1 },
+    precios: { haiku: null, sonnet: { entrada: '2', salida: 11 }, opus: 'caro' },
+    remoto: { activo: 'si', escuchar: 5, hostsPermitidos: 'mi-pc' },
+  }));
+  const c = cargarConfig(env);
+  assert.deepEqual(c.ramasProtegidas, ['main', 'master']);
+  assert.equal(c.paraleloMax, 4);
+  assert.equal(c.fableMaxPorSesion, 1, 'los válidos se conservan');
+  assert.deepEqual(c.modelosOrquestador, ['opus', 'fable']);
+  assert.equal(c.conversacionesMax, 2);
+  assert.equal(c.puertoDashboard, 4321);
+  assert.deepEqual([c.modoPermisoDefecto, c.alBloquear, c.mostrarCosto, c.alertasModelo], ['preguntar', 'preguntar', true, false]);
+  assert.equal(c.rutaClaude, null);
+  assert.deepEqual(c.miClave, { x: 1 }, 'las claves desconocidas se conservan');
+  assert.deepEqual(c.precios.haiku, { entrada: 0.1, salida: 0.5, cacheLectura: 0.01, cacheEscritura: 0.125 });
+  assert.deepEqual(c.precios.sonnet, { entrada: 2, salida: 11, cacheLectura: 0.2, cacheEscritura: 2.5 }, 'por campo: salida válida, entrada de fábrica');
+  assert.deepEqual(c.precios.opus, { entrada: 4, salida: 20, cacheLectura: 0.2, cacheEscritura: 5 });
+  assert.deepEqual(c.remoto, { activo: false, escuchar: '127.0.0.1', hostsPermitidos: [] });
+});
+
+test('config: listas con elementos que no son texto también caen a fábrica', () => {
+  const env = home();
+  writeFileSync(rutaConfig(env), JSON.stringify({ ramasProtegidas: ['main', 3], modelosOrquestador: [], remoto: { activo: true, hostsPermitidos: [null] } }));
+  const c = cargarConfig(env);
+  assert.deepEqual(c.ramasProtegidas, ['main', 'master']);
+  assert.deepEqual(c.modelosOrquestador, ['opus', 'fable']);
+  assert.deepEqual(c.remoto, { activo: true, escuchar: '127.0.0.1', hostsPermitidos: [] });
+});

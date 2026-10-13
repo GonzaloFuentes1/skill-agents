@@ -59,13 +59,53 @@ export function normalizarRubrica(r) {
 export const rubricaEsDeFabrica = (r) => normalizarRubrica(r)
   .every((x, i) => x.modelo === RUBRICA_FABRICA[i].modelo && x.esfuerzo === RUBRICA_FABRICA[i].esfuerzo);
 
+// Tipos que debe tener cada campo leído de config.json. Uno editado a mano con otro tipo (p. ej. "ramasProtegidas": null)
+// cae a su valor de fábrica: así ni los hooks ni la pestaña Configuración reciben un valor que no saben usar.
+const esTexto = (v) => typeof v === 'string';
+const listaDeTexto = (v) => Array.isArray(v) && v.every(esTexto);
+const TIPOS = {
+  fableMaxPorSesion: Number.isInteger,
+  paraleloMax: Number.isInteger,
+  conversacionesMax: Number.isInteger,
+  puertoDashboard: Number.isInteger,
+  modelosOrquestador: (v) => listaDeTexto(v) && v.length > 0,
+  ramasProtegidas: listaDeTexto,
+  rutaClaude: (v) => v === null || esTexto(v),
+  modoPermisoDefecto: (v) => MODOS_PERMISO.includes(v),
+  alBloquear: (v) => AL_BLOQUEAR.includes(v),
+  mostrarCosto: (v) => typeof v === 'boolean',
+  alertasModelo: (v) => typeof v === 'boolean',
+};
+const TIPOS_REMOTO = { activo: (v) => typeof v === 'boolean', escuchar: esTexto, hostsPermitidos: listaDeTexto };
+const precioValido = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+
+// Toma de `usuario` solo los campos de `tipos` que pasan su comprobación; las demás claves se copian tal cual.
+function conTipos(defecto, usuario, tipos) {
+  const out = { ...defecto };
+  for (const [k, v] of Object.entries(usuario)) {
+    if (!Object.hasOwn(tipos, k) || tipos[k](v)) out[k] = v;
+  }
+  return out;
+}
+
+function preciosDe(usuario) {
+  const out = structuredClone(CONFIG_DEFECTO.precios);
+  if (!esObjeto(usuario)) return out;
+  for (const [m, p] of Object.entries(usuario)) {
+    if (!esObjeto(p)) continue; // fila inválida: queda la de fábrica (o se ignora si el modelo no es conocido)
+    const base = out[m] ?? {};
+    out[m] = { ...base, ...Object.fromEntries(Object.entries(p).filter(([k, v]) => !CAMPOS_PRECIO.includes(k) || precioValido(v))) };
+  }
+  return out;
+}
+
 export function cargarConfig(env = process.env) {
   const { datos } = leerJsonUsuario(rutaConfig(env));
   const usuario = esObjeto(datos) ? datos : {};
   return {
-    ...CONFIG_DEFECTO, ...usuario,
-    precios: { ...CONFIG_DEFECTO.precios, ...(esObjeto(usuario.precios) ? usuario.precios : {}) },
-    remoto: { ...CONFIG_DEFECTO.remoto, ...(esObjeto(usuario.remoto) ? usuario.remoto : {}) },
+    ...conTipos(CONFIG_DEFECTO, usuario, TIPOS),
+    precios: preciosDe(usuario.precios),
+    remoto: conTipos(CONFIG_DEFECTO.remoto, esObjeto(usuario.remoto) ? usuario.remoto : {}, TIPOS_REMOTO),
     rubrica: normalizarRubrica(usuario.rubrica),
   };
 }

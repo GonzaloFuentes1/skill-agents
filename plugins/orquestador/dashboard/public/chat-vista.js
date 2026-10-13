@@ -16,7 +16,8 @@ export function desdeHistorial({ conversacion, mensajes = [], permisos = [], den
     mensajes: mensajes.map((m) => ({ ...m, bloques: m.bloques.map((b) => ({ ...b })) })),
     parcial: '', permisos: [...permisos], estado: conversacion?.estado ?? 'inactiva', error: conversacion?.error ?? null,
   };
-  for (const d of denegados) reducirChat(chat, { tipo: 'chat:denegado', ...d });
+  // Mismo camino que una denegación nueva (tarjeta con "Autorizar y reintentar"); el tipo va al final para que ningún campo lo pise.
+  for (const d of denegados) reducirChat(chat, { ...d, tipo: 'chat:denegado' });
   anotarError(chat);
   return chat;
 }
