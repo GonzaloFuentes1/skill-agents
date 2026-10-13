@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { parsearFrontmatter } from '../scripts/lib/frontmatter.mjs';
 import { AGENTES_INTEGRADOS, extraerPersona } from '../scripts/lib/agentes.mjs';
 import { rutaAgentesUsuario, rutaAgentesProyecto } from '../scripts/lib/rutas.mjs';
-import { escribirAtomico, sinBom } from '../scripts/lib/archivos.mjs';
+import { escribirAtomico, respaldar, sinBom } from '../scripts/lib/archivos.mjs';
+import { ESFUERZOS } from '../scripts/lib/modelos.mjs';
+import { ejecutarClaude } from './cli-claude.mjs';
 import { ErrorConversacion } from './conversaciones.mjs';
 
 export const RAIZ_PLUGIN = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
@@ -213,4 +215,176 @@ export function detalleAgente(origen, id, opciones = {}) {
     origen, ...resumen(a), ...extra, archivo, prompt: a.cuerpo.trim(), persona: extraerPersona(a.cuerpo),
     secciones: seccionesDe(a.cuerpo), editable: propio, alcance: propio ? origen : null,
   };
+}
+
+// ---------- agentes personalizados ----------
+export const TOOLS_VALIDAS = Object.freeze(['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'WebSearch', 'WebFetch', 'NotebookEdit']);
+export const MODELOS_AGENTE = Object.freeze(['haiku', 'sonnet', 'opus', 'fable', 'inherit']);
+const COLOR_POR_MODELO = { haiku: 'cyan', sonnet: 'blue', opus: 'purple', fable: 'pink', inherit: 'green' };
+export const REGLAS_CRITICAS = [
+  '## REGLAS CRÍTICAS',
+  '',
+  '- Nunca agregues coautoría de IA (`Co-Authored-By`, "Generated with Claude") en nada que produzcas.',
+  '- No inventes fuentes, citas, URLs, datos ni resultados. Si algo no se puede verificar, dilo.',
+  '- No hagas commits ni push: eso es del Guardián Git (`orquestador:guardian-git`).',
+  '- Respeta los permisos: si una acción se deniega, no la rodees; informa el bloqueo y propón otra vía.',
+  '- Responde en español.',
+].join('\n');
+
+export function slugAgente(nombre) {
+  return String(nombre ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
+}
+
+const esObjeto = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+// Solo formato. Las colisiones con el catálogo, el plugin o los integrados se revisan al crear (409).
+export function validarAgente(campos, { id: idFijo = null } = {}) {
+  const c = esObjeto(campos) ? campos : {};
+  const errores = {};
+  const id = idFijo ?? slugAgente(c.nombre);
+  if (id.length < 3 || id.length > 40 || !ID_AGENTE.test(id)) errores.nombre = 'El nombre debe dar un id de 3 a 40 caracteres (letras, números y guiones)';
+  const descripcion = typeof c.descripcion === 'string' ? c.descripcion.trim() : '';
+  if (descripcion.length < 20 || descripcion.length > 400 || /[\n"\\]/.test(descripcion)) {
+    errores.descripcion = 'Entre 20 y 400 caracteres, en una línea, sin comillas dobles ni barras invertidas';
+  }
+  if (!MODELOS_AGENTE.includes(c.modelo)) errores.modelo = 'Elige haiku, sonnet, opus, fable o heredar';
+  if (!ESFUERZOS.includes(c.esfuerzo)) errores.esfuerzo = 'Elige un esfuerzo válido';
+  const pedidas = Array.isArray(c.herramientas) ? [...new Set(c.herramientas)] : [];
+  if (!pedidas.length || !pedidas.every((h) => TOOLS_VALIDAS.includes(h))) errores.herramientas = 'Elige al menos una herramienta válida';
+  const sec = esObjeto(c.secciones) ? c.secciones : {};
+  const secciones = {};
+  for (const [k, titulo] of SECCIONES) {
+    const v = typeof sec[k] === 'string' ? sec[k].replace(/\r\n/g, '\n').trim() : '';
+    if (!v || v.length > 4000) errores[k] = `${titulo}: entre 1 y 4000 caracteres`;
+    else if (/^##\s/m.test(v) || v.includes('<!--')) errores[k] = `${titulo}: sin títulos "##" ni comentarios HTML`;
+    secciones[k] = v;
+  }
+  const alcance = c.alcance ?? 'usuario';
+  if (!['usuario', 'proyecto'].includes(alcance)) errores.alcance = 'Elige "Todos mis proyectos" o "Solo este repo"';
+  return { errores, limpio: { id, descripcion, modelo: c.modelo, esfuerzo: c.esfuerzo, herramientas: TOOLS_VALIDAS.filter((t) => pedidas.includes(t)), secciones, alcance } };
+}
+
+const primeraFrase = (t) => {
+  const s = String(t ?? '').split('\n')[0].trim();
+  const m = /^(.+?[.!?])(\s|$)/.exec(s);
+  return (m ? m[1] : s).slice(0, 200);
+};
+
+export function construirArchivo({ id, descripcion, modelo, esfuerzo, herramientas, secciones }) {
+  return [
+    '---', `name: ${id}`, `description: "${descripcion}"`, `model: ${modelo}`, `effort: ${esfuerzo}`,
+    `tools: ${herramientas.join(', ')}`, `color: ${COLOR_POR_MODELO[modelo]}`, '---', '',
+    `Persona: ${primeraFrase(secciones.rol)}`, '',
+    ...SECCIONES.flatMap(([k, titulo]) => [`## ${titulo}`, '', secciones[k], '']),
+    REGLAS_CRITICAS, '',
+  ].join('\n');
+}
+
+function dirAlcance(alcance, env, cwdProyecto) {
+  if (alcance !== 'proyecto') return rutaAgentesUsuario(env);
+  if (!cwdProyecto) throw new ErrorConversacion(400, 'Para guardar en el proyecto abre una conversación en esa carpeta');
+  return rutaAgentesProyecto(cwdProyecto);
+}
+
+function exigirValido(errores) {
+  if (Object.keys(errores).length) throw new ErrorConversacion(400, 'Revisa los campos marcados', { errores });
+}
+
+export function crearPersonalizado(campos, opciones = {}) {
+  const o = opcionesDe(opciones);
+  const { errores, limpio } = validarAgente(campos);
+  exigirValido(errores);
+  const { id } = limpio;
+  if (cargarCatalogo(o.raizPlugin).has(id)) throw new ErrorConversacion(409, `"${id}" es un agente del catálogo; actívalo desde su pack o elige otro nombre`);
+  if (idsReservados(o.raizPlugin).has(id)) throw new ErrorConversacion(409, `"${id}" es un agente del plugin o integrado de Claude Code; elige otro nombre`);
+  const ruta = join(dirAlcance(limpio.alcance, o.env, o.cwdProyecto), `${id}.md`);
+  if (existsSync(ruta)) throw new ErrorConversacion(409, `Ya existe un agente llamado ${id} en ${limpio.alcance === 'proyecto' ? 'este proyecto' : 'tus agentes'}`);
+  escribirAtomico(ruta, construirArchivo(limpio));
+  return detalleAgente(limpio.alcance, id, o);
+}
+
+function rutaPropia(id, alcance, o) {
+  const ruta = join(dirAlcance(alcance, o.env, o.cwdProyecto), `${id}.md`);
+  if (!existsSync(ruta)) throw new ErrorConversacion(404, 'No existe ese agente personalizado');
+  if (leerMarcador(readFileSync(ruta, 'utf8'))) throw new ErrorConversacion(409, `${id} viene del catálogo; duplícalo como personalizado para cambiarlo`);
+  return ruta;
+}
+
+export function editarPersonalizado(id, campos, opciones = {}) {
+  const o = opcionesDe(opciones);
+  validarId(id);
+  const { errores, limpio } = validarAgente(campos, { id });
+  exigirValido(errores);
+  const ruta = rutaPropia(id, limpio.alcance, o);
+  respaldar(ruta, '.bak');
+  escribirAtomico(ruta, construirArchivo(limpio));
+  return detalleAgente(limpio.alcance, id, o);
+}
+
+export function eliminarPersonalizado(id, cuerpo, opciones = {}) {
+  const o = opcionesDe(opciones);
+  validarId(id);
+  if (cuerpo?.confirmar !== true) throw new ErrorConversacion(400, 'Confirma la eliminación con {confirmar:true}');
+  const alcance = cuerpo.alcance ?? 'usuario';
+  if (!['usuario', 'proyecto'].includes(alcance)) throw new ErrorConversacion(400, 'Alcance inválido');
+  const ruta = rutaPropia(id, alcance, o);
+  respaldar(ruta, '.bak');
+  rmSync(ruta);
+  return { id, eliminado: true };
+}
+
+// ---------- "Redactar con Claude" ----------
+export const ESQUEMA_SECCIONES = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  required: SECCIONES.map(([k]) => k),
+  properties: Object.fromEntries(SECCIONES.map(([k, titulo]) => [k, { type: 'string', description: titulo }])),
+});
+
+export const argumentosRedactar = () => [
+  '-p', '--model', 'sonnet', '--tools', '', '--no-session-persistence', '--output-format', 'json', '--json-schema', JSON.stringify(ESQUEMA_SECCIONES),
+];
+
+export function promptRedaccion({ nombre, descripcion, modelo, herramientas }) {
+  return [
+    'Redacta el prompt de sistema de un subagente de Claude Code. Devuelve solo las cinco secciones del esquema.',
+    `Nombre: ${nombre}`,
+    `Cuándo usarlo: ${descripcion}`,
+    `Modelo: ${modelo}`,
+    `Herramientas disponibles: ${herramientas.length ? herramientas.join(', ') : 'ninguna'}`,
+    '',
+    'Secciones:',
+    '- rol: quién es, con qué actitud trabaja y en qué se diferencia de agentes vecinos (2 a 4 frases).',
+    '- metodo: de 4 a 7 pasos numerados ("1. …"), cada uno una acción concreta y comprobable; el último verifica el resultado.',
+    '- entregable: qué produce exactamente (formato, ubicación y nivel de detalle).',
+    '- restricciones: de 3 a 5 viñetas ("- …") con lo que no debe hacer nunca.',
+    '- retorno: estructura fija de 3 a 5 bloques numerados para responder al orquestador, en un máximo de ~300 palabras.',
+    '',
+    'No incluyas títulos "##" ni reglas sobre coautoría, commits o idioma: se agregan aparte.',
+    'Escribe en español, profesional, sin relleno.',
+  ].join('\n');
+}
+
+export function extraerRedaccion(stdout) {
+  let o;
+  try { o = JSON.parse(String(stdout ?? '').trim()); } catch { throw new ErrorConversacion(502, 'Claude no devolvió un borrador válido'); }
+  if (o?.is_error) throw new ErrorConversacion(502, `Claude no pudo redactar: ${o.result ?? o.subtype ?? 'error'}`);
+  let s = o?.structured_output;
+  if (!esObjeto(s)) { try { s = JSON.parse(o?.result); } catch { s = null; } }
+  if (!esObjeto(s) || !SECCIONES.every(([k]) => typeof s[k] === 'string' && s[k].trim())) throw new ErrorConversacion(502, 'El borrador de Claude no trae las cinco secciones');
+  return Object.fromEntries(SECCIONES.map(([k]) => [k, s[k].trim()]));
+}
+
+export async function redactarPrompt(campos, { env = process.env, spawnFn, timeoutMs = 90_000 } = {}) {
+  const c = esObjeto(campos) ? campos : {};
+  const nombre = typeof c.nombre === 'string' ? c.nombre.trim() : '';
+  const descripcion = typeof c.descripcion === 'string' ? c.descripcion.trim() : '';
+  if (!nombre || nombre.length > 80) throw new ErrorConversacion(400, 'Escribe un nombre de hasta 80 caracteres', { errores: { nombre: 'Requerido, hasta 80 caracteres' } });
+  if (!descripcion || descripcion.length > 400) throw new ErrorConversacion(400, 'Describe cuándo usarlo (hasta 400 caracteres)', { errores: { descripcion: 'Requerido, hasta 400 caracteres' } });
+  if (!MODELOS_AGENTE.includes(c.modelo)) throw new ErrorConversacion(400, 'Elige un modelo', { errores: { modelo: 'Elige un modelo' } });
+  const herramientas = Array.isArray(c.herramientas) ? c.herramientas.filter((h) => TOOLS_VALIDAS.includes(h)) : [];
+  const r = await ejecutarClaude(argumentosRedactar(), { env, spawnFn, timeoutMs, entrada: promptRedaccion({ nombre, descripcion, modelo: c.modelo, herramientas }) });
+  if (r.codigo !== 0) throw new ErrorConversacion(502, r.stderr.split('\n').filter(Boolean).pop() || `Claude Code terminó con código ${r.codigo}`);
+  return extraerRedaccion(r.stdout);
 }
