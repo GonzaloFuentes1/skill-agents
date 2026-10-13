@@ -11,3 +11,5 @@ export const rutaEventos = (env = process.env) => join(dirBase(env), 'events.jso
 export const rutaSesion = (id, env = process.env) => join(dirBase(env), 'sessions', `${limpiarId(id)}.json`);
 export const rutaConfig = (env = process.env) => join(dirBase(env), 'config.json');
 export const rutaRaizPlugin = (env = process.env) => join(dirBase(env), 'plugin-root.txt');
+export const rutaConversaciones = (env = process.env) => join(dirBase(env), 'conversaciones.json');
+export const rutaToken = (env = process.env) => join(dirBase(env), 'token');

@@ -2,11 +2,11 @@
 // /orquestador:dashboard: levanta el servidor si no está corriendo (o si corre otra versión) y abre el navegador.
 // Uso: node lanzar.mjs [--no-abrir]
 import { spawn } from 'node:child_process';
-import { openSync, mkdirSync } from 'node:fs';
+import { openSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cargarConfig } from '../scripts/lib/config.mjs';
-import { dirBase } from '../scripts/lib/rutas.mjs';
+import { dirBase, rutaToken } from '../scripts/lib/rutas.mjs';
 import { esPrincipal } from '../scripts/lib/hook-io.mjs';
 import { VERSION, RAIZ_DASHBOARD } from './server.mjs';
 
@@ -38,8 +38,19 @@ export function comandoAbrir(url, plataforma = process.platform) {
   return ['xdg-open', [url]];
 }
 
+const LOCALES = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+const conCorchetes = (h) => (String(h).includes(':') && !String(h).startsWith('[') ? `[${h}]` : String(h));
+
+export function urlsRemotas(config, token) {
+  const r = config.remoto ?? {};
+  if (!r.activo) return [];
+  const hosts = r.hostsPermitidos?.length ? r.hostsPermitidos : [r.escuchar || '127.0.0.1'].filter((h) => !LOCALES.has(h));
+  return hosts.map((h) => `http://${conCorchetes(h)}:${config.puertoDashboard}/?t=${token}`);
+}
+
 async function main(argv) {
-  const puerto = cargarConfig().puertoDashboard;
+  const config = cargarConfig();
+  const puerto = config.puertoDashboard;
   const url = `http://127.0.0.1:${puerto}/`;
   const log = join(dirBase(), 'dashboard.log');
   let salud = await consultarSalud(puerto);
@@ -58,11 +69,19 @@ async function main(argv) {
       return;
     }
   }
+  let token = '';
+  try { token = readFileSync(rutaToken(), 'utf8').trim(); } catch { /* servidor antiguo sin token */ }
   if (!argv.includes('--no-abrir')) {
-    const [cmd, args] = comandoAbrir(url);
+    const [cmd, args] = comandoAbrir(token ? `${url}?t=${token}` : url);
     spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   }
   console.log(`Dashboard del orquestador: ${url}`);
+  if (argv.includes('--remoto')) {
+    const urls = urlsRemotas(config, token);
+    if (!urls.length) console.log('El modo remoto está apagado. Actívalo en ~/.claude/orquestador/config.json (remoto.activo, escuchar y hostsPermitidos) y vuelve a abrir el dashboard.');
+    for (const u of urls) console.log(`Desde otro equipo: ${u}`);
+    if (urls.length) console.log('Trátalo como una contraseña: quien tenga este enlace puede ejecutar código en este equipo.');
+  }
 }
 
 if (esPrincipal(import.meta.url)) main(process.argv.slice(2));

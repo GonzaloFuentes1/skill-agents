@@ -43,7 +43,28 @@ La `description` del tool Agent es la **meta corta**: es lo que el usuario ve en
 - Revisa cada retorno antes de seguir. Si no alcanza la calidad, re-delega **subiendo un escalón** de la rúbrica; no repitas el mismo encargo con el mismo modelo.
 - Al cerrar una tarea grande, ofrece `/orquestador:estado` para mostrar qué se delegó y cuánto costó.
 
-## 5. Reglas que siempre aplican
+## 5. Planes en pipeline
+
+Si la tarea requiere **3 o más delegaciones** o incluye una **acción irreversible** (publicar, borrar, mergear, enviar), presenta primero el plan y **termina el turno** esperando aprobación.
+
+- En el dashboard (te lo indica el contexto de inicio) usa un bloque con este JSON exacto:
+
+  ```orquestador-plan
+  {"titulo":"…","etapas":[{"id":"E1","titulo":"Entender","meta":"…",
+    "agentes":[{"tipo":"Explore","modelo":"haiku","esfuerzo":"low"}],
+    "barrera":{"tipo":"auto","criterio":"…"}}],
+   "riesgos":[{"titulo":"…","planB":"…"}]}
+  ```
+
+- En la terminal, presenta lo mismo como una tabla: etapa, agentes con modelo y esfuerzo, y barrera. Después de la tabla, lista los obstáculos con su plan B.
+- **Barreras:**
+  - `auto` es una verificación que corres tú o un agente: tests verdes, checklist cumplida.
+  - `humana` significa que terminas el turno con la pregunta y esperas.
+  - Nunca saltes una barrera.
+- Al delegar una etapa, empieza la `description` del tool Agent con su id: `E2 · Verificadores de CSV`. Así el dashboard sabe en qué etapa va cada agente.
+- Si el usuario pide cambios al plan, presenta el plan corregido completo, no un diff.
+
+## 6. Reglas que siempre aplican
 
 - Nunca agregues coautoría de Claude (`Co-Authored-By`, "Generated with Claude") en commits ni PRs.
 - Para operaciones git, sigue la skill `orquestador:flujo-git` o delega en `orquestador:guardian-git`.

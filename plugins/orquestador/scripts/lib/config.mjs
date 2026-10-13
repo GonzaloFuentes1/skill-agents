@@ -9,6 +9,9 @@ export const CONFIG_DEFECTO = Object.freeze({
   puertoDashboard: 4321,
   modelosOrquestador: ['opus', 'fable'],
   ramasProtegidas: ['main', 'master'],
+  conversacionesMax: 2,
+  rutaClaude: null,
+  remoto: { activo: false, escuchar: '127.0.0.1', hostsPermitidos: [] },
   precios: {
     haiku: { entrada: 0.1, salida: 0.5, cacheLectura: 0.01, cacheEscritura: 0.125 },
     sonnet: { entrada: 2, salida: 10, cacheLectura: 0.2, cacheEscritura: 2.5 },
@@ -20,7 +23,11 @@ export const CONFIG_DEFECTO = Object.freeze({
 export function cargarConfig(env = process.env) {
   try {
     const usuario = JSON.parse(readFileSync(rutaConfig(env), 'utf8'));
-    return { ...CONFIG_DEFECTO, ...usuario, precios: { ...CONFIG_DEFECTO.precios, ...(usuario.precios ?? {}) } };
+    return {
+      ...CONFIG_DEFECTO, ...usuario,
+      precios: { ...CONFIG_DEFECTO.precios, ...(usuario.precios ?? {}) },
+      remoto: { ...CONFIG_DEFECTO.remoto, ...(usuario.remoto ?? {}) },
+    };
   } catch {
     return { ...CONFIG_DEFECTO };
   }

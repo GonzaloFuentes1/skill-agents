@@ -79,9 +79,15 @@ export function reducir(vista, e) {
       anotar({ texto: e.meta ?? '', modelo: `${familia(e.modelo)}·${e.esfuerzo ?? '—'}` });
       return { vista, efecto: { tipo: 'enviar', sesion: s.id, id: e.id } };
     }
+    case 'agente-inicio': {
+      const n = s.nodos[e.id];
+      if (n && e.agentId) n.agentId = e.agentId;
+      return { vista, efecto: null };
+    }
     case 'fin': {
       const n = s.nodos[e.id];
-      if (!n || (n.estado !== 'activo' && n.estado !== 'sin-cierre')) return { vista, efecto: null };
+      if (n && e.agentId) n.agentId = e.agentId;
+      if (!n ||(n.estado !== 'activo' && n.estado !== 'sin-cierre')) return { vista, efecto: null };
       const eraActivo = n.estado === 'activo';
       n.estado = e.ok === false ? 'fallido' : 'terminado';
       s.cierres += 1;
