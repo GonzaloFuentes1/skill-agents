@@ -1,15 +1,25 @@
 // Arranque del dashboard: tema, pestañas, conversaciones, SSE y wiring entre chat, actividad y panel de agentes.
-import { el, boton, preferencia, guardarPreferencia } from './dom.js';
+import { el, boton, preferencia, guardarPreferencia, familiaModelo, capitalizar } from './dom.js';
 import { chatVacio, desdeHistorial, reducirChat } from './chat-vista.js';
 import { renderChat } from './chat.js';
 import { renderAgentes } from './agentes-panel.js';
-import { iniciarActividad, procesarEvento, inicioConexion, finReplay, mostrarSesion, vistaActual, alCambiar } from './actividad.js';
+import {
+  iniciarActividad, procesarEvento, inicioConexion, finReplay, mostrarSesion, vistaActual, alCambiar, fijarCostoVisible, fijarModeloOrquestador,
+} from './actividad.js';
 import { formatoCosto } from './estado-vista.js';
+import { costoVisible } from './config-vista.js';
 
 const $ = (id) => document.getElementById(id);
 const ESTADO_CLASE = { trabajando: 'e-trabajando', 'esperando-permiso': 'e-accion', error: 'e-error', lista: 'e-listo', inactiva: 'e-cola' };
-const estado = { conversaciones: [], actual: null, chat: chatVacio(), agente: null, pasos: [], desde: 0, consultaFinal: null };
-let costoOculto = preferencia('orq-costo-oculto', '0') === '1';
+const estado = { conversaciones: [], actual: null, chat: chatVacio(), agente: null, pasos: [], desde: 0, consultaFinal: null, config: null };
+const leerSesion = (k) => { try { return sessionStorage.getItem(k); } catch { return null; } };
+const guardarSesion = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* sin almacenamiento */ } };
+// config.mostrarCosto manda; el botón Mostrar/Ocultar deja solo un atajo para esta sesión del navegador.
+let atajoCosto = leerSesion('orq-costo-atajo');
+let sinSesionVisible = false;
+let editandoTitulo = false;
+let firmaUso = null;
+const verCosto = () => costoVisible(estado.config?.mostrarCosto, atajoCosto);
 
 // ---------- tema ----------
 function aplicarTema(t) { document.documentElement.dataset.tema = t; guardarPreferencia('orq-tema', t); }
@@ -26,6 +36,7 @@ function toast(texto) {
 }
 
 function sinSesion() {
+  sinSesionVisible = true; // el render que esté en curso no debe pisar este aviso
   $('mensajes').replaceChildren(el('div', 'vacio-chat', 'Falta iniciar sesión en el dashboard. Ábrelo con /orquestador:dashboard desde Claude Code.'));
 }
 
@@ -33,13 +44,26 @@ async function api(metodo, ruta, cuerpo) {
   const r = await fetch(ruta, { method: metodo, headers: cuerpo ? { 'content-type': 'application/json' } : {}, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
   const datos = await r.json().catch(() => ({}));
   if (r.status === 401) { sinSesion(); throw new Error(datos.error ?? 'Falta iniciar sesión'); }
-  if (!r.ok) throw new Error(datos.error ?? `Error ${r.status}`);
+  if (!r.ok) {
+    const e = new Error(datos.error ?? `Error ${r.status}`);
+    e.datos = datos; // p. ej. { errores: { campo: mensaje } }
+    throw e;
+  }
   return datos;
 }
 
 const convActual = () => estado.conversaciones.find((c) => c.id === estado.actual) ?? null;
 const sesionActual = () => { const c = convActual(); return c?.sessionId ? vistaActual().sesiones[c.sessionId] ?? null : null; };
 const ruta = (c, sufijo) => `/api/conversaciones/${encodeURIComponent(c.id)}/${sufijo}`;
+const llenarComposer = (t) => { $('entrada').value = t; $('entrada').focus(); };
+
+// ---------- costo ----------
+function aplicarCosto() { fijarCostoVisible(verCosto()); firmaUso = null; actualizarUso(); }
+function alternarCosto() { atajoCosto = verCosto() ? 'ocultar' : 'mostrar'; guardarSesion('orq-costo-atajo', atajoCosto); aplicarCosto(); }
+async function cargarConfigUI() {
+  try { estado.config = await api('GET', '/api/config'); } catch { /* sin config: valores por defecto */ }
+  aplicarCosto();
+}
 
 // ---------- pestañas y cajones ----------
 function mostrarPestana(p) {
@@ -59,7 +83,7 @@ $('ver-agentes').addEventListener('click', () => document.body.classList.toggle(
 const cerrarCajones = () => document.body.classList.remove('lateral-abierto', 'panel-abierto');
 $('velo').addEventListener('click', cerrarCajones);
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && !$('dialogo-nueva').open) cerrarCajones();
+  if (ev.key === 'Escape' && !document.querySelector('dialog[open]')) cerrarCajones();
 });
 
 // ---------- render ----------
@@ -80,7 +104,16 @@ function renderLista() {
 
 function renderCabecera() {
   const c = convActual();
-  $('titulo').textContent = c?.titulo ?? 'Orquestador';
+  if (!editandoTitulo) $('titulo').textContent = c?.titulo ?? 'Orquestador';
+  $('titulo').disabled = !c;
+  $('titulo').title = c ? 'Renombrar conversación' : '';
+  const chip = $('chip-orquestador');
+  const fam = familiaModelo(c?.modelo);
+  chip.hidden = !c || fam === 'desconocido';
+  chip.className = `chip-modelo m-${fam}`;
+  chip.title = c?.modelo ? `Modelo del orquestador: ${c.modelo}` : '';
+  chip.replaceChildren(el('span', 'punto'), document.createTextNode(capitalizar(fam)));
+  fijarModeloOrquestador(c?.modelo ?? null);
   const sub = $('subtitulo');
   sub.replaceChildren();
   if (c) {
@@ -102,6 +135,36 @@ function renderCabecera() {
   $('cerrar-conv').disabled = !c?.pid || enCurso;
 }
 
+// Renombrar en el lugar: Enter guarda, Escape (o salir del campo) cancela.
+function empezarRenombrar() {
+  const c = convActual();
+  if (!c) return;
+  editandoTitulo = true;
+  const input = $('titulo-input');
+  input.value = c.titulo;
+  $('titulo').hidden = true;
+  input.hidden = false;
+  input.focus();
+  input.select();
+}
+function terminarRenombrar(guardar) {
+  if (!editandoTitulo) return;
+  editandoTitulo = false;
+  const c = convActual();
+  const nuevo = $('titulo-input').value.trim();
+  $('titulo-input').hidden = true;
+  $('titulo').hidden = false;
+  $('titulo').focus();
+  if (guardar && c && nuevo && nuevo !== c.titulo) api('POST', ruta(c, 'titulo'), { titulo: nuevo }).catch((e) => toast(e.message));
+  renderCabecera();
+}
+$('titulo').addEventListener('click', empezarRenombrar);
+$('titulo-input').addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') { ev.preventDefault(); terminarRenombrar(true); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); terminarRenombrar(false); }
+});
+$('titulo-input').addEventListener('blur', () => terminarRenombrar(false));
+
 function renderPanel() {
   renderAgentes($('panel-agentes'), {
     sesion: sesionActual(), seleccionado: estado.agente, pasos: estado.pasos,
@@ -118,13 +181,13 @@ function contextoChat() {
     nodos: s ? s.ordenNodos.map((k) => s.nodos[k]) : [],
     nodosPorId: s?.nodos ?? {},
     vacio: c ? 'Escríbele al orquestador para empezar.' : 'Crea una conversación para empezar.',
+    alBloquear: estado.config?.alBloquear ?? 'preguntar',
     verAgente: (id) => { seleccionarAgente(id); document.body.classList.add('panel-abierto'); },
     responderPermiso: (sid, decision) => api('POST', ruta(c, `permisos/${encodeURIComponent(sid)}`), { decision }).catch((e) => toast(e.message)),
     retomar: () => enviar('Continúa donde quedaste.'), // enviar relanza el proceso con --resume
-    planAcciones: {
-      onAprobar: () => enviar('Apruebo el plan.'),
-      onCambios: () => { $('entrada').value = 'Cambios al plan: '; $('entrada').focus(); },
-    },
+    reintentar: (mensaje) => enviar(mensaje),
+    planAcciones: { onAprobar: () => enviar('Apruebo el plan.'), onCambios: () => llenarComposer('Cambios al plan: ') },
+    barreraAcciones: { onAprobar: () => enviar('Apruebo, continúa.'), onCambios: () => llenarComposer('Cambios antes de continuar: ') },
   };
 }
 
@@ -135,12 +198,12 @@ function renderTodo() {
   requestAnimationFrame(() => {
     renderPendiente = false;
     renderCabecera();
-    renderChat($('mensajes'), estado.chat, contextoChat());
+    if (!sinSesionVisible) renderChat($('mensajes'), estado.chat, contextoChat());
     renderPanel();
   });
 }
 
-// ---------- uso de la conversación (Fable, paralelo, costo ocultable) ----------
+// ---------- uso de la conversación (Fable, paralelo y costo ocultable) ----------
 function filaUso(nombre, valor, clase, fraccion) {
   const f = el('div', `uso-fila ${clase}`);
   const l = el('div', 'fila');
@@ -153,7 +216,6 @@ function filaUso(nombre, valor, clase, fraccion) {
   return f;
 }
 
-let firmaUso = null;
 async function actualizarUso() {
   const c = convActual();
   if (!c?.sessionId) { $('uso').hidden = true; firmaUso = null; return; }
@@ -161,20 +223,23 @@ async function actualizarUso() {
     const d = await api('GET', `/estado?session=${encodeURIComponent(c.sessionId)}`);
     const fable = d.estado?.fableUsados ?? 0;
     const activos = sesionActual()?.stats.activos ?? 0;
+    const visible = verCosto();
+    const orquestador = convActual()?.costoUSD ?? 0;
+    const agentes = d.estado?.costoUSD ?? 0;
     // Se reconstruye solo si cambió algo: así el botón Mostrar/Ocultar no pierde el foco cada 3 s.
-    const firma = JSON.stringify([c.sessionId, fable, activos, d.config.fableMaxPorSesion, d.config.paraleloMax, d.estado?.costoUSD ?? 0, costoOculto]);
+    const firma = JSON.stringify([c.sessionId, fable, activos, d.config.fableMaxPorSesion, d.config.paraleloMax, orquestador, agentes, visible]);
     if (firma === firmaUso && !$('uso').hidden) return;
     firmaUso = firma;
     const teniaFoco = $('uso').contains(document.activeElement);
-    const costo = el('div', 'fila');
-    costo.append(
-      el('span', 'tenue', 'Costo estimado'), el('strong', null, costoOculto ? '••••' : formatoCosto(d.estado?.costoUSD ?? 0)),
-      boton(costoOculto ? 'Mostrar' : 'Ocultar', 'boton-texto', () => {
-        costoOculto = !costoOculto;
-        guardarPreferencia('orq-costo-oculto', costoOculto ? '1' : '0');
-        actualizarUso();
-      }, costoOculto ? 'Mostrar costo' : 'Ocultar costo'),
-    );
+    const costo = el('div', 'bloque-costo');
+    const cab = el('div', 'fila');
+    cab.append(el('span', 'tenue', 'Costo estimado'), boton(visible ? 'Ocultar' : 'Mostrar', 'boton-texto', alternarCosto, visible ? 'Ocultar costo' : 'Mostrar costo'));
+    const linea = (nombre, usd, clase = '') => {
+      const f = el('div', `fila ${clase}`);
+      f.append(el('span', 'tenue', nombre), el('strong', null, visible ? formatoCosto(usd) : '••••'));
+      return f;
+    };
+    costo.append(cab, linea('Orquestador', orquestador), linea('Agentes', agentes), linea('Total', orquestador + agentes, 'total'));
     $('uso').replaceChildren(
       el('div', 'versalita tenue', 'Esta conversación'),
       filaUso('Fable usados', `${fable} de ${d.config.fableMaxPorSesion}`, 'm-fable', fable / Math.max(1, d.config.fableMaxPorSesion)),
@@ -236,6 +301,7 @@ async function abrir(id, { recarga = false } = {}) {
     estado.agente = null;
     estado.pasos = [];
     estado.desde = 0;
+    terminarRenombrar(false);
   }
   estado.actual = id;
   guardarPreferencia('orq-conversacion', id);
@@ -249,6 +315,7 @@ async function abrir(id, { recarga = false } = {}) {
     if (h.aviso) toast(h.aviso);
     if (h.conversacion.sessionId) mostrarSesion(h.conversacion.sessionId);
   } catch (e) { toast(e.message); }
+  firmaUso = null;
   renderTodo();
   actualizarUso();
 }
@@ -276,6 +343,7 @@ const dialogo = $('dialogo-nueva');
 let temporizadorCarpetas = null;
 $('nueva').addEventListener('click', () => {
   $('carpeta').value = preferencia('orq-ultima-carpeta', '');
+  $('modo-nueva').value = estado.config?.modoPermisoDefecto ?? 'preguntar';
   $('error-nueva').textContent = '';
   dialogo.showModal();
   $('carpeta').focus();
@@ -323,18 +391,19 @@ function conectar() {
     if (e.conversacion !== estado.actual) return;
     reducirChat(estado.chat, e);
     renderTodo();
-    if (e.tipo === 'chat:fin-turno') actualizarUso();
+    if (e.tipo === 'chat:fin-turno' || e.tipo === 'chat:estado') actualizarUso();
   });
 }
 
 alCambiar(() => renderTodo());
 
 async function arrancar() {
-  iniciarActividad();
+  iniciarActividad({ alternarCosto });
   mostrarPestana(preferencia('orq-pestana', 'chat') === 'actividad' ? 'actividad' : 'chat');
   renderTodo();
   try {
     await cargarConversaciones();
+    await cargarConfigUI();
     const previa = preferencia('orq-conversacion', null);
     const inicial = estado.conversaciones.find((c) => c.id === previa) ?? estado.conversaciones[0];
     if (inicial) await abrir(inicial.id);

@@ -89,14 +89,14 @@ test('frontend: estructura, módulos y sin innerHTML ni recursos externos', asyn
     const html = (await get(base, '/')).texto;
     for (const id of ['escenario', 'lineas', 'nodos', 'tarjetas', 'centro', 'centro-modelo', 'sesion', 'seguir', 'animaciones', 'conexion', 'stats', 'timeline', 'toast', 'demo', 'vacio',
       'conversaciones', 'nueva', 'uso', 'titulo', 'subtitulo', 'tab-chat', 'tab-actividad', 'vista-chat', 'vista-actividad', 'mensajes', 'composer', 'entrada', 'enviar', 'detener',
-      'modo', 'tema', 'panel-agentes', 'menu', 'ver-agentes', 'cerrar-conv', 'velo', 'dialogo-nueva', 'form-nueva', 'carpeta', 'carpetas', 'modo-nueva', 'cancelar-nueva', 'error-nueva']) {
+      'modo', 'tema', 'panel-agentes', 'menu', 'ver-agentes', 'cerrar-conv', 'velo', 'dialogo-nueva', 'form-nueva', 'carpeta', 'carpetas', 'modo-nueva', 'cancelar-nueva', 'error-nueva', 'titulo-input', 'chip-orquestador', 'titulo-eventos']) {
       assert.match(html, new RegExp(`id="${id}"`), `falta #${id}`);
     }
     assert.match(html, /<script type="module" src="\.\/app\.js"><\/script>/);
     assert.match((await get(base, '/actividad.js')).texto, /from '\.\/estado-vista\.js'/);
     assert.match((await get(base, '/actividad.js')).texto, /prefers-reduced-motion/);
     assert.match((await get(base, '/tema.css')).texto, /\[data-tema="claro"\]/);
-    for (const archivo of ['/', '/app.js', '/actividad.js', '/chat.js', '/plan.js', '/agentes-panel.js', '/dom.js', '/chat-vista.js', '/plan-vista.js', '/tema.css', '/actividad.css']) {
+    for (const archivo of ['/', '/app.js', '/actividad.js', '/chat.js', '/plan.js', '/agentes-panel.js', '/dom.js', '/chat-vista.js', '/plan-vista.js', '/config-vista.js', '/agentes-vista.js', '/tema.css', '/actividad.css']) {
       const r = await get(base, archivo);
       assert.equal(r.status, 200, archivo);
       assert.doesNotMatch(r.texto, /innerHTML/, `${archivo} usa innerHTML`);

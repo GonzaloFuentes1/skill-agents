@@ -40,3 +40,26 @@ test('tema.css: objetivos táctiles de al menos 44 px', () => {
   assert.doesNotMatch(css, /min-height:\s*(3\d|40)px/);
   assert.match(css, /\.boton-enviar\s*\{[^}]*width:\s*44px/);
 });
+
+test('actividad.css: sin-animacion acotada a la vista Actividad y objetivos de 44 px en el demo y las casillas', () => {
+  const css = leer('actividad.css');
+  assert.match(css, /body\.sin-animacion \.vista-actividad \*/);
+  assert.doesNotMatch(css, /body\.sin-animacion \*,/);
+  assert.match(css, /\.vista-actividad \.vacio button\s*\{[^}]*min-height:\s*44px/);
+  assert.match(css, /\.vista-actividad \.casilla\s*\{[^}]*min-height:\s*44px/);
+  assert.match(css, /\.vista-actividad \.controles select\s*\{[^}]*min-height:\s*44px/);
+});
+
+test('actividad.css: las clases nuevas también van acotadas a .vista-actividad', () => {
+  const css = leer('actividad.css');
+  for (const g of ['resumen', 'eventos', 'columna-mapa', 'evento', 'casilla', 'bloque-resumen', 'etiqueta-evento', 'limite', 'centro-caja', 'costo-grande', 'item-leyenda']) {
+    assert.doesNotMatch(css, sinPrefijo(g), `.${g} sin prefijo .vista-actividad`);
+  }
+});
+
+test('tema.css: título editable de 44 px, tarjeta de denegación y franja de barrera en ámbar', () => {
+  const css = leer('tema.css');
+  assert.match(css, /\.titulo-editable\s*\{[^}]*min-height:\s*44px/);
+  assert.match(css, /\.denegacion\s*\{[^}]*var\(--accion\)/);
+  assert.match(css, /\.barrera-humana\s*\{[^}]*var\(--accion\)/);
+});
