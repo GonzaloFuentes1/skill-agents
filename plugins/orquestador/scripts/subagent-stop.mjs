@@ -91,7 +91,7 @@ export async function manejar(entrada, env = process.env) {
     } catch { /* sin transcript legible */ }
   }
   const r = await conEstado(entrada.session_id, (e) => cerrarDelegacion(entrada, e, analisis), env);
-  for (const ev of r.eventos) emitir(ev, env);
+  for (const ev of r.eventos) emitir(ev.tipo === 'fin' ? { ...ev, transcript: ruta } : ev, env);
   return r.alerta ? { systemMessage: `[orquestador] ${r.alerta}` } : null;
 }
 
