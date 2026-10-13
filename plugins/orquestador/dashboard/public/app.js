@@ -10,6 +10,7 @@ import { formatoCosto } from './estado-vista.js';
 import { costoVisible } from './config-vista.js';
 import { iniciarConfiguracion, abrirConfiguracion, hayCambiosConfig } from './configuracion.js';
 import { iniciarAgentes, abrirAgentes } from './agentes-catalogo.js';
+import { admitir, esImagen, nombrePegada, renderFichas } from './adjuntos.js';
 
 const $ = (id) => document.getElementById(id);
 const ESTADO_CLASE = { trabajando: 'e-trabajando', 'esperando-permiso': 'e-accion', error: 'e-error', lista: 'e-listo', inactiva: 'e-cola' };
@@ -138,6 +139,7 @@ function renderCabecera() {
   $('modo').disabled = !c;
   $('entrada').disabled = !c;
   $('enviar').disabled = !c;
+  $('adjuntar').disabled = !c;
   const enCurso = !!c && ['trabajando', 'esperando-permiso'].includes(c.estado);
   $('detener').hidden = !enCurso;
   // Libera el proceso de Claude Code de la conversación; el siguiente mensaje lo retoma con --resume.
@@ -331,19 +333,112 @@ async function abrir(id, { recarga = false } = {}) {
   if (document.body.dataset.pestana === 'agentes') abrirAgentes(); // los agentes del proyecto dependen de la conversación abierta
 }
 
-async function enviar(texto) {
+// ---------- adjuntos del composer ----------
+// { id, archivo: File, url: objectURL de la miniatura | null }. Las URL se liberan al quitar o al enviar.
+const adjuntos = [];
+let idAdjunto = 0;
+let pegadas = 0;
+
+function renderAdjuntos() { renderFichas($('adjuntos'), adjuntos, quitarAdjunto); }
+function agregarArchivos(lista) {
+  if (!convActual() || !lista.length) return;
+  const { aceptados, errores } = admitir(adjuntos.map((a) => a.archivo), [...lista]);
+  for (const f of aceptados) adjuntos.push({ id: ++idAdjunto, archivo: f, url: esImagen(f.type) ? URL.createObjectURL(f) : null });
+  if (errores.length) toast(errores.join(' '));
+  renderAdjuntos();
+}
+function quitarAdjunto(id) {
+  const i = adjuntos.findIndex((a) => a.id === id);
+  if (i < 0) return;
+  const [a] = adjuntos.splice(i, 1);
+  if (a.url) URL.revokeObjectURL(a.url);
+  renderAdjuntos();
+  $('entrada').focus(); // el botón quitado desaparece: el foco vuelve a la caja de texto
+}
+function vaciarAdjuntos(enviados) {
+  for (const a of enviados) {
+    if (a.url) URL.revokeObjectURL(a.url);
+    const i = adjuntos.indexOf(a);
+    if (i >= 0) adjuntos.splice(i, 1);
+  }
+  renderAdjuntos();
+}
+const leerBase64 = (f) => new Promise((ok, mal) => {
+  const r = new FileReader();
+  r.onload = () => { const s = String(r.result); ok(s.slice(s.indexOf(',') + 1)); };
+  r.onerror = () => mal(new Error(`No se pudo leer ${f.name}`));
+  r.readAsDataURL(f);
+});
+
+$('adjuntar').addEventListener('click', () => $('archivos').click());
+$('archivos').addEventListener('change', (ev) => { agregarArchivos(ev.target.files); ev.target.value = ''; });
+// Pegar imágenes en la caja de texto. Si el portapapeles trae también texto, el texto se pega igual.
+$('entrada').addEventListener('paste', (ev) => {
+  const items = [...(ev.clipboardData?.items ?? [])];
+  const imagenes = items.filter((i) => i.kind === 'file' && esImagen(i.type)).map((i) => i.getAsFile()).filter(Boolean);
+  if (!imagenes.length) return;
+  if (!items.some((i) => i.kind === 'string' && i.type === 'text/plain')) ev.preventDefault();
+  agregarArchivos(imagenes.map((f) => new File([f], nombrePegada(f.type, ++pegadas), { type: f.type })));
+});
+// Arrastrar y soltar sobre el chat. Fuera del chat se evita que el navegador abra el archivo y deje el dashboard.
+const conArchivos = (ev) => [...(ev.dataTransfer?.types ?? [])].includes('Files');
+let profundidadArrastre = 0;
+const vistaChat = $('vista-chat');
+vistaChat.addEventListener('dragenter', (ev) => {
+  if (!conArchivos(ev) || !convActual()) return;
+  ev.preventDefault();
+  profundidadArrastre++;
+  vistaChat.classList.add('arrastrando');
+});
+vistaChat.addEventListener('dragleave', (ev) => {
+  if (!conArchivos(ev)) return;
+  profundidadArrastre = Math.max(0, profundidadArrastre - 1);
+  if (!profundidadArrastre) vistaChat.classList.remove('arrastrando');
+});
+vistaChat.addEventListener('drop', (ev) => {
+  if (!conArchivos(ev)) return;
+  ev.preventDefault();
+  profundidadArrastre = 0;
+  vistaChat.classList.remove('arrastrando');
+  agregarArchivos(ev.dataTransfer.files);
+});
+addEventListener('dragover', (ev) => {
+  if (!conArchivos(ev)) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = vistaChat.contains(ev.target) && convActual() ? 'copy' : 'none';
+});
+addEventListener('drop', (ev) => { if (conArchivos(ev)) ev.preventDefault(); });
+
+// Envía texto y, opcionalmente, archivos. Devuelve true si el servidor lo aceptó.
+async function enviar(texto, archivos = []) {
   const c = convActual();
   const t = String(texto ?? '').trim();
-  if (!c || !t) return;
+  if (!c || (!t && !archivos.length)) return false;
   try {
-    await api('POST', ruta(c, 'mensajes'), { texto: t });
-    $('entrada').value = '';
-  } catch (e) { toast(e.message); }
+    const cuerpo = { texto: t };
+    if (archivos.length) cuerpo.adjuntos = await Promise.all(archivos.map(async (f) => ({ nombre: f.name, tipo: f.type, datos: await leerBase64(f) })));
+    await api('POST', ruta(c, 'mensajes'), cuerpo);
+    return true;
+  } catch (e) { toast(e.message); return false; }
 }
 
-$('composer').addEventListener('submit', (ev) => { ev.preventDefault(); enviar($('entrada').value); });
+// El composer manda lo escrito y los adjuntos; los botones (Aprobar plan, Autorizar y reintentar…) mandan solo su texto.
+let enviandoComposer = false;
+async function enviarComposer() {
+  if (enviandoComposer) return;
+  enviandoComposer = true;
+  const enviados = [...adjuntos];
+  try {
+    if (await enviar($('entrada').value, enviados.map((a) => a.archivo))) {
+      $('entrada').value = '';
+      vaciarAdjuntos(enviados);
+    }
+  } finally { enviandoComposer = false; }
+}
+
+$('composer').addEventListener('submit', (ev) => { ev.preventDefault(); enviarComposer(); });
 $('entrada').addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); enviar($('entrada').value); }
+  if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); enviarComposer(); }
 });
 $('detener').addEventListener('click', () => { const c = convActual(); if (c) api('POST', ruta(c, 'interrumpir'), {}).catch((e) => toast(e.message)); });
 $('cerrar-conv').addEventListener('click', () => { const c = convActual(); if (c?.pid) api('POST', ruta(c, 'cerrar'), {}).catch((e) => toast(e.message)); });

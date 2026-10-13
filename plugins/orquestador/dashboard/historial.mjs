@@ -56,7 +56,9 @@ export function mensajesDesdeTranscript(texto) {
       }
       const textos = bloquesDe(c).filter((b) => b.tipo === 'texto' && !ESCONDIDO.test(b.texto) && !INTERRUMPIDO.test(b.texto));
       const avisos = textos.flatMap((b) => notificacionesDe(b.texto));
-      const bloques = textos.filter((b) => !notificacionesDe(b.texto).length);
+      // Imágenes adjuntas: solo la marca (la vista las muestra como ficha "Imagen"), nunca el base64.
+      const imagenes = (Array.isArray(c) ? c : []).filter((b) => b?.type === 'image').map(() => ({ tipo: 'imagen' }));
+      const bloques = [...textos.filter((b) => !notificacionesDe(b.texto).length), ...imagenes];
       if (avisos.length) mensajes.push({ rol: 'notificacion', id: e.uuid ?? `n${mensajes.length}`, bloques: avisos });
       if (bloques.length) mensajes.push({ rol: 'usuario', id: e.uuid ? `${e.uuid}${avisos.length ? '-u' : ''}` : `u${mensajes.length}`, bloques });
     } else if (e.type === 'assistant') {

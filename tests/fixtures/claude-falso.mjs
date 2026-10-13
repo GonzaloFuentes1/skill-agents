@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 // Claude Code falso para tests: reproduce un guion JSONL y registra lo que recibe por stdin.
 // Guion (FALSO_GUION): [{ esperar: 'user'|'control_response'|'control_request' }, { emitir: {...} }, { emitirSinSalto: {...} }, { crudo: '...' }, { salir: 1, stderr: '...' }]
-import { readFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, existsSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 const guion = JSON.parse(readFileSync(process.env.FALSO_GUION, 'utf8'));
 const anotar = (x) => { if (process.env.FALSO_REGISTRO) appendFileSync(process.env.FALSO_REGISTRO, JSON.stringify(x) + '\n'); };
-anotar({ argv: process.argv.slice(2), canal: process.env.ORQUESTADOR_CANAL ?? null, claudecode: process.env.CLAUDECODE ?? null, cwd: process.cwd() });
+const argv = process.argv.slice(2);
+anotar({ argv, canal: process.env.ORQUESTADOR_CANAL ?? null, claudecode: process.env.CLAUDECODE ?? null, cwd: process.cwd() });
+
+// --add-dir <carpeta>: se acepta (una o varias veces) y, como el real, exige que la carpeta exista.
+const sinCarpeta = argv.flatMap((a, i) => (a === '--add-dir' ? [argv[i + 1]] : [])).find((d) => !d || !existsSync(d) || !statSync(d).isDirectory());
+if (sinCarpeta !== undefined) {
+  process.stderr.write(`Error: --add-dir ${sinCarpeta ?? ''} no es una carpeta existente\n`);
+  process.exitCode = 1;
+}
 
 const entradas = [];
 let despertar = null;
@@ -49,4 +57,5 @@ async function correr() {
   }
   await esperar('__nunca'); // vive hasta que se cierre stdin; entonces el proceso termina solo con código 0
 }
-correr();
+if (sinCarpeta === undefined) correr();
+else { rl.close(); process.stdin.destroy(); }

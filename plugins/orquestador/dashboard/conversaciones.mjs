@@ -5,16 +5,15 @@ import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { EventEmitter } from 'node:events';
-import { rutaConversaciones } from '../scripts/lib/rutas.mjs';
+import { rutaConversaciones, rutaAdjuntos } from '../scripts/lib/rutas.mjs';
 import { cargarConfig } from '../scripts/lib/config.mjs';
 import { leerJsonUsuario, respaldar } from '../scripts/lib/archivos.mjs';
 import { cerrarDeSesion } from '../scripts/lib/cierres.mjs';
 import { abrirProceso, resolverBinario, MODOS } from './proceso-claude.mjs';
+import { ErrorConversacion } from './errores.mjs';
+import { validarAdjuntos, guardarAdjuntos, textoConAdjuntos, contenidoMensaje } from './adjuntos.mjs';
 
-export class ErrorConversacion extends Error {
-  // extra: datos que acompañan al error en la respuesta JSON (p. ej. { errores: { campo: mensaje } }).
-  constructor(status, mensaje, extra = null) { super(mensaje); this.status = status; this.extra = extra; }
-}
+export { ErrorConversacion };
 
 const EN_CURSO = new Set(['trabajando', 'esperando-permiso']);
 const TITULO_NUEVO = 'Nueva conversación';
@@ -83,7 +82,7 @@ export function crearGestor({
   const reglas = new Map();
   const cerrando = new Set();
   const interrumpidas = new Set();
-  const porEnviar = new Map(); // id → textos que llegaron mientras el proceso se cerraba
+  const porEnviar = new Map(); // id → contenidos (texto o bloques) que llegaron mientras el proceso se cerraba
   const denegados = new Map(); // id → últimas denegaciones del modo automático (solo en memoria)
   const temporizadores = { inactividad: new Map(), interrupcion: new Map() };
   let apagando = false; // tras apagar() no se abre ningún proceso nuevo
@@ -130,7 +129,10 @@ export function crearGestor({
     if (procesos.has(c.id)) return procesos.get(c.id);
     const binario = resolverBinario(cargarConfig(env), env);
     if (!binario) throw new ErrorConversacion(500, 'No encontré el binario de Claude Code; define rutaClaude en config.json');
-    const p = abrirProceso({ cwd: c.cwd, sessionId: c.sessionId, modo: c.modo, binario, env, spawnFn });
+    // La carpeta de adjuntos va siempre con --add-dir (Claude la lee sin pedir permiso); se crea antes de lanzar.
+    const adjuntos = rutaAdjuntos(c.id, env);
+    try { mkdirSync(adjuntos, { recursive: true }); } catch { /* sin carpeta, los adjuntos fallarán al guardarse y se avisará */ }
+    const p = abrirProceso({ cwd: c.cwd, sessionId: c.sessionId, modo: c.modo, dirsAdicionales: [adjuntos], binario, env, spawnFn });
     procesos.set(c.id, p);
     pendientes.set(c.id, new Map());
     c.pid = p.pid;
@@ -140,14 +142,14 @@ export function crearGestor({
 
   // Tras la salida de un proceso que se cerraba, los mensajes que esperaban abren uno nuevo con --resume.
   function enviarPendientes(c) {
-    const textos = porEnviar.get(c.id);
+    const contenidos = porEnviar.get(c.id);
     porEnviar.delete(c.id);
-    if (apagando || !textos?.length) return;
+    if (apagando || !contenidos?.length) return;
     try {
       const p = asegurarProceso(c);
       c.estado = 'trabajando';
       c.error = null;
-      for (const t of textos) p.enviar(t);
+      for (const x of contenidos) p.enviar(x);
     } catch (e) {
       c.estado = 'error';
       c.error = e.message;
@@ -287,24 +289,32 @@ export function crearGestor({
       return publica(c);
     },
 
-    enviar(id, texto) {
+    // adjuntos: [{ nombre, datos: base64 }] del cliente. Se guardan en disco, las imágenes van en línea y el texto lleva
+    // un pie [Adjuntos] con la ruta de cada archivo.
+    enviar(id, texto, adjuntos) {
       const c = buscar(id);
       const t = String(texto ?? '').trim();
-      if (!t) throw new ErrorConversacion(400, 'El mensaje está vacío');
+      const lista = validarAdjuntos(adjuntos);
+      if (!t && !lista.length) throw new ErrorConversacion(400, 'El mensaje está vacío');
       const max = cargarConfig(env).conversacionesMax;
       if (!EN_CURSO.has(c.estado) && enCurso() >= max) throw new ErrorConversacion(409, `Hay ${enCurso()} conversaciones trabajando; espera o detén una`);
+      let guardados;
+      try { guardados = guardarAdjuntos(rutaAdjuntos(c.id, env), lista); } catch (e) { throw new ErrorConversacion(500, `No se pudieron guardar los adjuntos: ${e.message}`); }
       // Si el proceso se está cerrando (inactividad o "Cerrar proceso"), escribirle sería perder el mensaje.
       const esperaSalida = cerrando.has(c.id) && procesos.has(c.id);
       const p = esperaSalida ? null : asegurarProceso(c);
       desarmar('inactividad', c.id);
       interrumpidas.delete(c.id);
-      if (c.titulo === TITULO_NUEVO) c.titulo = t.length > 60 ? `${t.slice(0, 59)}…` : t;
+      const resumen = t || `Adjuntos: ${guardados.map((g) => g.nombre).join(', ')}`;
+      if (c.titulo === TITULO_NUEVO) c.titulo = resumen.length > 60 ? `${resumen.slice(0, 59)}…` : resumen;
       c.estado = 'trabajando';
       c.error = null;
       c.ultima = ahora();
-      emitir({ tipo: 'chat:usuario', conversacion: c.id, id: randomUUID(), texto: t });
-      if (esperaSalida) porEnviar.set(c.id, [...(porEnviar.get(c.id) ?? []), t]);
-      else p.enviar(t);
+      const final = textoConAdjuntos(t, guardados);
+      const contenido = contenidoMensaje(final, guardados);
+      emitir({ tipo: 'chat:usuario', conversacion: c.id, id: randomUUID(), texto: final }); // la vista separa el pie; nunca el base64
+      if (esperaSalida) porEnviar.set(c.id, [...(porEnviar.get(c.id) ?? []), contenido]);
+      else p.enviar(contenido);
       guardar();
       emitirEstado(c);
     },

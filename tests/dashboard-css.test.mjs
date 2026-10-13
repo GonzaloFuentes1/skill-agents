@@ -75,6 +75,21 @@ test('tema.css: interruptores, opciones, contadores y botones de quitar con obje
   assert.match(css, /\.pestanas\s*\{[^}]*overflow-x:\s*auto/); // 4 pestañas en 390 px: se desplaza la barra, no la página
 });
 
+test('tema.css: adjuntos con objetivos de 44 px (clip y quitar) y nombres largos que se abrevian sin desbordar', () => {
+  const css = leer('tema.css');
+  assert.match(css, /\.boton-adjuntar\s*\{[^}]*width:\s*44px[^}]*height:\s*44px/);
+  assert.match(css, /\.ficha-adjunto \.quitar\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/);
+  assert.match(css, /\.nombre-adjunto\s*\{[^}]*text-overflow:\s*ellipsis/);
+  assert.match(css, /\.ficha-adjunto\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/);
+});
+
+test('index.html: botón de adjuntar con aria-label, selector de archivos múltiple y lista de fichas', () => {
+  const html = leer('index.html');
+  assert.match(html, /<button id="adjuntar" type="button" class="boton-adjuntar" aria-label="Adjuntar archivos"/);
+  assert.match(html, /<input id="archivos" type="file" multiple hidden/);
+  assert.match(html, /<div id="adjuntos" class="fichas-adjuntos" role="list"[^>]*hidden>/);
+});
+
 // Contraste WCAG entre dos colores #RRGGBB.
 const luminancia = (hex) => {
   const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));

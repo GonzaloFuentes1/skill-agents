@@ -164,6 +164,25 @@ button.notificacion:hover { border-color: var(--c); }
 .composer-pie .tenue { flex: 1; font-size: 12px; }
 .boton-enviar { width: 44px; height: 44px; border: 0; border-radius: 10px; background: var(--enviar); color: #fff; cursor: pointer; font-size: 18px; }
 
+/* Adjuntos: clip, fichas del composer (antes de enviar) y fichas bajo la burbuja del usuario */
+.boton-adjuntar { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--texto-2); cursor: pointer; }
+.boton-adjuntar:hover:not(:disabled) { background: var(--seleccion); color: var(--texto); }
+.boton-adjuntar svg { width: 20px; height: 20px; }
+.fichas-adjuntos { display: flex; flex-wrap: wrap; gap: 8px; }
+.ficha-adjunto { display: flex; align-items: center; gap: 10px; flex: 0 1 260px; min-width: 0; max-width: 100%; padding: 6px 2px 6px 6px; border: 1px solid var(--borde-fuerte); border-radius: 12px; background: var(--hundido); }
+.ficha-adjunto .miniatura, .ficha-adjunto .icono-adjunto { flex: none; width: 44px; height: 44px; border-radius: 8px; }
+.miniatura { display: block; object-fit: cover; }
+.icono-adjunto { display: grid; place-items: center; background: color-mix(in srgb, var(--clay) 18%, transparent); color: var(--clay); font-size: 11px; font-weight: 700; }
+.datos-adjunto { display: flex; flex-direction: column; flex: 1; min-width: 0; font-size: 13px; line-height: 1.35; }
+.datos-adjunto .tenue { font-size: 12px; }
+.nombre-adjunto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ficha-adjunto .quitar { flex: none; min-width: 44px; min-height: 44px; border-radius: 8px; }
+.adjuntos-msg { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 82%; }
+.ficha-msg { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 4px 10px 4px 4px; border: 1px solid var(--borde-fuerte); border-radius: 10px; background: var(--tarjeta); font-size: 13px; }
+.ficha-msg .icono-adjunto { flex: none; width: 28px; height: 28px; border-radius: 6px; font-size: 9.5px; }
+.vista-chat { position: relative; }
+.vista-chat.arrastrando::after { content: "Suelta los archivos para adjuntarlos"; position: absolute; inset: 8px; z-index: 5; display: grid; place-items: center; border: 2px dashed var(--clay); border-radius: 16px; background: color-mix(in srgb, var(--fondo) 85%, transparent); color: var(--texto); font-weight: 600; pointer-events: none; }
+
 /* Plan en pipeline */
 .plan { border: 1px solid var(--borde-fuerte); border-radius: 16px; background: var(--tarjeta); overflow: hidden; }
 .plan-cab { display: flex; flex-direction: column; gap: 2px; padding: 14px 18px; background: var(--hundido); border-bottom: 1px solid var(--borde-fuerte); }
@@ -401,7 +420,7 @@ dialog input, dialog select { min-height: 42px; padding: 0 12px; border-radius: 
   .mensajes { padding: 20px 16px; }
   .composer { padding: 12px 16px 16px; }
   .plan-detalle { grid-template-columns: minmax(0, 1fr); }
-  .burbuja { max-width: 92%; }
+  .burbuja, .adjuntos-msg { max-width: 92%; }
 }
 /* En Actividad el mapa y su resumen usan el ancho del panel de agentes (en pantallas anchas) */
 @media (min-width: 1181px) {

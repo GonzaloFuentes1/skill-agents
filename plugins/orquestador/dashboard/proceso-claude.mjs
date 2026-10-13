@@ -19,10 +19,12 @@ export function resolverBinario(config = {}, env = process.env, plataforma = pro
   return null;
 }
 
-export function argumentos({ sessionId = null, modo = 'preguntar' } = {}) {
+// dirsAdicionales: carpetas fuera del proyecto que Claude puede leer sin pedir permiso (p. ej. la de adjuntos).
+export function argumentos({ sessionId = null, modo = 'preguntar', dirsAdicionales = [] } = {}) {
   const a = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
     '--include-partial-messages', '--permission-prompts', 'host', '--permission-prompt-tool', 'stdio', '--permission-mode', MODOS[modo] ?? MODOS.preguntar];
   if (sessionId) a.push('--resume', sessionId);
+  for (const d of dirsAdicionales) a.push('--add-dir', d);
   return a;
 }
 
@@ -32,6 +34,15 @@ export function invocacion(binario, args) {
   const shell = /\.cmd"?$/i.test(b);
   const comando = shell && /\s/.test(b) && !/^".*"$/.test(b) ? `"${b}"` : b;
   return { comando, args, shell };
+}
+
+// Argumentos para cmd.exe (un .cmd), que no cita nada: sin esto, `--tools ""` desaparece, un JSON con comillas se rompe
+// y una ruta con espacios (p. ej. la de --add-dir) se parte en dos.
+// Reglas de citado de MSVCRT: las comillas internas se escapan con \ y las barras que preceden a una comilla se duplican.
+export function citarParaShell(arg) {
+  const s = String(arg);
+  if (s && !/[\s"^&|<>()%!]/.test(s)) return s;
+  return `"${s.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"`;
 }
 
 // Los mensajes de un subagente (parent_tool_use_id) se ignoran; los pedidos de control y el result son siempre del proceso.
@@ -89,7 +100,8 @@ export function crearNormalizador() {
   };
 }
 
-export const mensajeUsuario = (texto) => ({ type: 'user', message: { role: 'user', content: texto }, parent_tool_use_id: null, session_id: '' });
+// contenido: el texto, o un arreglo de bloques (p. ej. imágenes en base64 seguidas del texto).
+export const mensajeUsuario = (contenido) => ({ type: 'user', message: { role: 'user', content: contenido }, parent_tool_use_id: null, session_id: '' });
 export const respuestaPermiso = (solicitudId, { permitir, mensaje, entrada }) => ({
   type: 'control_response',
   response: {
@@ -100,12 +112,12 @@ export const respuestaPermiso = (solicitudId, { permitir, mensaje, entrada }) =>
 const pedidoControl = (id, request) => ({ type: 'control_request', request_id: id, request });
 const ultimaLinea = (t) => String(t ?? '').trim().split('\n').filter(Boolean).pop() ?? '';
 
-export function abrirProceso({ cwd, sessionId = null, modo = 'preguntar', binario, env = process.env, spawnFn = spawnNodo }) {
+export function abrirProceso({ cwd, sessionId = null, modo = 'preguntar', dirsAdicionales = [], binario, env = process.env, spawnFn = spawnNodo }) {
   const em = new EventEmitter();
   const entornoHijo = { ...env, ORQUESTADOR_CANAL: 'dashboard' };
   delete entornoHijo.CLAUDECODE; // lanzado desde una sesión de Claude Code: el hijo no debe creerse anidado
-  const { comando, args, shell } = invocacion(binario, argumentos({ sessionId, modo }));
-  const hijo = spawnFn(comando, args, { cwd, env: entornoHijo, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell });
+  const { comando, args, shell } = invocacion(binario, argumentos({ sessionId, modo, dirsAdicionales }));
+  const hijo = spawnFn(comando, shell ? args.map(citarParaShell) : args, { cwd, env: entornoHijo, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell });
   const normalizar = crearNormalizador();
   const entradas = new Map();
   const decodificador = new StringDecoder('utf8');
@@ -145,7 +157,7 @@ export function abrirProceso({ cwd, sessionId = null, modo = 'preguntar', binari
 
   const escribir = (obj) => { if (hijo.stdin?.writable) hijo.stdin.write(JSON.stringify(obj) + '\n'); };
   em.pid = hijo.pid ?? null;
-  em.enviar = (texto) => escribir(mensajeUsuario(texto));
+  em.enviar = (contenido) => escribir(mensajeUsuario(contenido));
   // Un id desconocido (o ya respondido) no se envía: Claude Code no espera esa respuesta.
   em.responderPermiso = (id, { permitir, mensaje } = {}) => {
     if (!entradas.has(id)) return false;
