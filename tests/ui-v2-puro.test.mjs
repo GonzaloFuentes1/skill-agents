@@ -12,7 +12,7 @@ import { slugAgente } from '../plugins/orquestador/dashboard/agentes.mjs';
 import { chatVacio, desdeHistorial, reducirChat } from '../plugins/orquestador/dashboard/public/chat-vista.js';
 import { modeloDenegacion, resumenEntrada } from '../plugins/orquestador/dashboard/public/chat.js';
 import { barreraHumana } from '../plugins/orquestador/dashboard/public/plan-vista.js';
-import { vistaVacia, reducir, etiquetaEvento, numeracion, pedidoVsReal, claseNodo } from '../plugins/orquestador/dashboard/public/estado-vista.js';
+import { vistaVacia, reducir, etiquetaEvento, numeracion, pedidoVsReal, claseNodo, orquestadorDeSesion } from '../plugins/orquestador/dashboard/public/estado-vista.js';
 import { verificacion } from '../plugins/orquestador/dashboard/public/agentes-panel.js';
 
 const configBase = () => ({ ...structuredClone({ ...CONFIG_DEFECTO, rubrica: normalizarRubrica(null) }), miClave: 1 });
@@ -204,4 +204,17 @@ test('agentes-vista: con filtro activo un grupo vacío dice que nada coincide', 
   assert.equal(textoVacio('  ', 'Aún no tienes agentes personalizados.'), 'Aún no tienes agentes personalizados.');
   assert.equal(textoVacio('rl', 'Aún no tienes agentes personalizados.'), 'Ningún agente coincide con el filtro.');
   assert.equal(textoVacio('', null), null);
+});
+
+test('actividad: el modelo y el costo de la conversación del chat solo valen para su propia sesión', () => {
+  const conv = { sessionId: 's1', modelo: 'claude-fable-5', costoUSD: 0.42 };
+  assert.deepEqual(orquestadorDeSesion(conv, 's1', 'opus'), { modelo: 'claude-fable-5', costoUSD: 0.42 });
+  // Otra sesión elegida en Actividad: modelo desde el estado del servidor y costo del orquestador no disponible.
+  assert.deepEqual(orquestadorDeSesion(conv, 's2', 'opus'), { modelo: 'opus', costoUSD: null });
+  assert.deepEqual(orquestadorDeSesion(conv, 's2', undefined), { modelo: null, costoUSD: null });
+  // Conversación sin sesión todavía o sin conversación abierta: nada coincide.
+  assert.deepEqual(orquestadorDeSesion({ sessionId: null, modelo: 'x', costoUSD: 1 }, null, 'opus'), { modelo: 'opus', costoUSD: null });
+  assert.deepEqual(orquestadorDeSesion(null, 's1', null), { modelo: null, costoUSD: null });
+  // Misma sesión sin modelo informado: cae al del servidor; costo ausente cuenta como 0.
+  assert.deepEqual(orquestadorDeSesion({ sessionId: 's1' }, 's1', 'opus'), { modelo: 'opus', costoUSD: 0 });
 });

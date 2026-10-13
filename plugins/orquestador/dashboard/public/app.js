@@ -4,7 +4,7 @@ import { chatVacio, desdeHistorial, reducirChat } from './chat-vista.js';
 import { renderChat } from './chat.js';
 import { renderAgentes } from './agentes-panel.js';
 import {
-  iniciarActividad, procesarEvento, inicioConexion, finReplay, mostrarSesion, vistaActual, alCambiar, fijarCostoVisible, fijarModeloOrquestador, fijarCostoOrquestador,
+  iniciarActividad, procesarEvento, inicioConexion, finReplay, mostrarSesion, vistaActual, alCambiar, fijarCostoVisible, fijarOrquestador,
 } from './actividad.js';
 import { formatoCosto } from './estado-vista.js';
 import { costoVisible } from './config-vista.js';
@@ -122,8 +122,7 @@ function renderCabecera() {
   chip.className = `chip-modelo m-${fam}`;
   chip.title = c?.modelo ? `Modelo del orquestador: ${c.modelo}` : '';
   chip.replaceChildren(el('span', 'punto'), document.createTextNode(capitalizar(fam)));
-  fijarModeloOrquestador(c?.modelo ?? null);
-  fijarCostoOrquestador(c?.costoUSD ?? 0);
+  fijarOrquestador(c); // Actividad usa su modelo y su costo solo si muestra la sesión de esta conversación
   const sub = $('subtitulo');
   sub.replaceChildren();
   sub.title = c?.cwd ?? '';

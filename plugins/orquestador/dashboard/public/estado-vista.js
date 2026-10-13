@@ -124,7 +124,17 @@ export function posicionOrbital(slot, { porAnillo = 8, radioBase = 0.28, paso = 
   return { x: 0.5 + r * Math.cos(angulo), y: 0.5 + r * Math.sin(angulo), anillo };
 }
 
-export const formatoCosto = (usd) => `$${(usd ?? 0).toFixed((usd ?? 0) >= 1 ? 2 : 3)}`;
+// Modelo y costo del orquestador para la sesión que muestra Actividad. Los datos de la conversación del chat solo valen si es
+// esa misma sesión; si no, el modelo sale del estado del servidor y el costo del orquestador queda como no disponible (null).
+export function orquestadorDeSesion(conv, sesionMostrada, modeloServidor = null) {
+  const misma = !!conv?.sessionId && conv.sessionId === sesionMostrada;
+  return {
+    modelo: (misma ? conv.modelo : null) ?? modeloServidor ?? null,
+    costoUSD: misma ? Number(conv.costoUSD) || 0 : null,
+  };
+}
+
+export const formatoCosto =(usd) => `$${(usd ?? 0).toFixed((usd ?? 0) >= 1 ? 2 : 3)}`;
 export function formatoDuracion(ms) {
   if (!ms) return '—';
   const s = ms / 1000;

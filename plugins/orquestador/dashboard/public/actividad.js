@@ -2,7 +2,7 @@
 // La lógica (posiciones, reductor y animación) vive en estado-vista.js y no cambia: este archivo solo dibuja.
 import {
   vistaVacia, reducir, posicionOrbital, disposicion, conciliarConServidor, formatoCosto, formatoDuracion, formatoTokens,
-  claseNodo, TEXTO_NODO, etiquetaEvento, numeracion, pedidoVsReal,
+  claseNodo, TEXTO_NODO, etiquetaEvento, numeracion, pedidoVsReal, orquestadorDeSesion,
 } from './estado-vista.js';
 import { el, boton, chipModelo, nombreAgente, capitalizar, familiaModelo } from './dom.js';
 
@@ -30,9 +30,10 @@ let enReplay = true;
 let servidor = null;            // { estado, config } de /estado
 const ocultos = new Set();      // nodos cuya tarjeta todavía viaja
 let costoVisible = true;        // lo fija app.js (config.mostrarCosto + atajo de sesión)
-let modeloOrquestador = null;   // modelo de la conversación abierta (evento sesion del proceso)
+// Conversación abierta en el chat ({ sessionId, modelo, costoUSD }, la fija app.js). Su modelo y su costo solo se usan si
+// Actividad muestra esa misma sesión: otra sesión elegida en el selector no hereda los datos del chat.
+let convOrquestador = null;
 let alternarCosto = null;       // callback de app.js para el botón Mostrar/Ocultar
-let costoOrquestador = 0;       // costo acumulado del proceso del orquestador (lo fija app.js)
 let firmaResumen = null;
 
 const hora = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
@@ -201,12 +202,13 @@ function renderResumen(s) {
   const st = s?.stats ?? { activos: 0, completados: 0, costoUSD: 0, alertas: 0, bloqueos: 0, fable: 0 };
   // El estado del servidor suma toda la sesión; la vista local solo ve los últimos eventos del historial.
   const costoAgentes = Math.max(st.costoUSD, servidor?.estado?.costoUSD ?? 0);
-  const costo = costoAgentes + costoOrquestador;
+  const orq = orquestadorDeSesion(convOrquestador, actual, servidor?.estado?.modeloPrincipal);
+  const costo = costoAgentes + (orq.costoUSD ?? 0); // sin costo del orquestador disponible, el total es solo el de los agentes
   const fableUsados = servidor?.estado?.fableUsados ?? st.fable;
   const grupos = pedidoVsReal(s);
-  const familiaOrq = familiaModelo(modeloOrquestador ?? servidor?.estado?.modeloPrincipal);
+  const familiaOrq = familiaModelo(orq.modelo);
   // Solo se reconstruye si cambió algo: así el botón Mostrar/Ocultar no pierde el foco con cada consulta.
-  const firma = JSON.stringify([actual, costoAgentes, costoOrquestador, costoVisible, st.activos, st.alertas, fableUsados, servidor?.config, grupos, familiaOrq]);
+  const firma = JSON.stringify([actual, costoAgentes, orq.costoUSD, costoVisible, st.activos, st.alertas, fableUsados, servidor?.config, grupos, familiaOrq]);
   if (firma === firmaResumen) return;
   firmaResumen = firma;
   const teniaFoco = $('stats').contains(document.activeElement);
@@ -216,7 +218,7 @@ function renderResumen(s) {
   if (alternarCosto) cab.append(boton(costoVisible ? 'Ocultar' : 'Mostrar', 'boton-texto', alternarCosto, costoVisible ? 'Ocultar costo' : 'Mostrar costo'));
   const bloqueCosto = el('section', 'bloque-resumen');
   bloqueCosto.append(cab, el('strong', 'costo-grande', costoVisible ? formatoCosto(costo) : '••••'),
-    el('span', 'tenue nota', costoVisible ? `Orquestador ${formatoCosto(costoOrquestador)} · Agentes ${formatoCosto(costoAgentes)}` : 'Orquestador + agentes'),
+    el('span', 'tenue nota', costoVisible ? `Orquestador ${orq.costoUSD == null ? '—' : formatoCosto(orq.costoUSD)} · Agentes ${formatoCosto(costoAgentes)}` : 'Orquestador + agentes'),
     el('span', 'tenue nota', 'Referencial: se calcula con la tabla de precios. Lo cubre tu plan.'));
 
   const limites = bloque('Límites',
@@ -445,17 +447,10 @@ export function fijarCostoVisible(visible) {
   render();
 }
 
-export function fijarCostoOrquestador(usd) {
-  const v = Number(usd) || 0;
-  if (v === costoOrquestador) return;
-  costoOrquestador = v;
-  renderResumen(sesion());
-}
-
-export function fijarModeloOrquestador(modelo) {
-  if ((modelo ?? null) === modeloOrquestador) return;
-  modeloOrquestador = modelo ?? null;
-  firmaResumen = null;
+export function fijarOrquestador(conv) {
+  const nuevo = conv ? { sessionId: conv.sessionId ?? null, modelo: conv.modelo ?? null, costoUSD: Number(conv.costoUSD) || 0 } : null;
+  if (JSON.stringify(nuevo) === JSON.stringify(convOrquestador)) return;
+  convOrquestador = nuevo;
   renderResumen(sesion());
 }
 
