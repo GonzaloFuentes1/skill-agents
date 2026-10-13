@@ -27,6 +27,7 @@ export function textoRubrica(rubrica) {
 }
 
 export function manejarInicio(entrada, env = process.env, raizPlugin = RAIZ_PLUGIN) {
+  if (env.ORQUESTADOR_CANAL === '') return null; // proceso auxiliar del dashboard (auto-mode, redactar): ni evento ni contexto
   try {
     const ruta = rutaRaizPlugin(env);
     mkdirSync(dirname(ruta), { recursive: true });

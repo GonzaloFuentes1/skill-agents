@@ -9,7 +9,8 @@ import { cargarConfig } from '../scripts/lib/config.mjs';
 import { abrirProceso, resolverBinario, MODOS } from './proceso-claude.mjs';
 
 export class ErrorConversacion extends Error {
-  constructor(status, mensaje) { super(mensaje); this.status = status; }
+  // extra: datos que acompañan al error en la respuesta JSON (p. ej. { errores: { campo: mensaje } }).
+  constructor(status, mensaje, extra = null) { super(mensaje); this.status = status; this.extra = extra; }
 }
 
 const EN_CURSO = new Set(['trabajando', 'esperando-permiso']);
