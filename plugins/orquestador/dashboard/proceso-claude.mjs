@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { StringDecoder } from 'node:string_decoder';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { bloquesDe, resultadosDe } from './bloques.mjs';
+import { bloquesDe, resultadosDe, notificacionesDe } from './bloques.mjs';
 
 export const MODOS = Object.freeze({ preguntar: 'manual', ediciones: 'acceptEdits', auto: 'auto' });
 
@@ -64,7 +64,11 @@ export function crearNormalizador() {
       }
       case 'user': {
         const r = resultadosDe(msg.message?.content);
-        return r.length ? [{ tipo: 'mensaje', mensajeId: null, rol: 'herramienta', bloques: r.map((x) => ({ tipo: 'resultado', ...x })) }] : [];
+        const avisos = bloquesDe(msg.message?.content).filter((b) => b.tipo === 'texto').flatMap((b) => notificacionesDe(b.texto));
+        return [
+          ...(r.length ? [{ tipo: 'mensaje', mensajeId: null, rol: 'herramienta', bloques: r.map((x) => ({ tipo: 'resultado', ...x })) }] : []),
+          ...(avisos.length ? [{ tipo: 'mensaje', mensajeId: msg.uuid ?? null, rol: 'notificacion', bloques: avisos }] : []),
+        ];
       }
       case 'result': {
         const ok = msg.subtype === 'success' && !msg.is_error;

@@ -20,6 +20,24 @@ export function bloquesDe(content) {
   return out;
 }
 
+// Aviso interno de Claude Code cuando un agente en segundo plano termina. Llega como mensaje de usuario, pero no lo es.
+const NOTIFICACION = /<task-notification>([\s\S]*?)<\/task-notification>/g;
+const etiqueta = (xml, nombre) => xml.match(new RegExp(`<${nombre}>([\\s\\S]*?)</${nombre}>`))?.[1].trim() || null;
+const numero = (xml, nombre) => { const v = Number(etiqueta(xml, nombre)); return etiqueta(xml, nombre) !== null && Number.isFinite(v) ? v : null; };
+
+export function notificacionesDe(texto) {
+  const s = String(texto ?? '');
+  if (!s.trimStart().startsWith('<task-notification>')) return [];
+  return [...s.matchAll(NOTIFICACION)].map(([, xml]) => {
+    const resumen = etiqueta(xml, 'summary');
+    return {
+      tipo: 'notificacion', tarea: etiqueta(xml, 'task-id'), usoId: etiqueta(xml, 'tool-use-id'), estado: etiqueta(xml, 'status'),
+      titulo: resumen ? (resumen.match(/^Agent "([\s\S]+)" \w+$/)?.[1] ?? resumen) : null,
+      tokens: numero(xml, 'subagent_tokens'), herramientas: numero(xml, 'tool_uses'), duracionMs: numero(xml, 'duration_ms'),
+    };
+  });
+}
+
 export function resultadosDe(content) {
   return (Array.isArray(content) ? content : [])
     .filter((b) => b?.type === 'tool_result')
