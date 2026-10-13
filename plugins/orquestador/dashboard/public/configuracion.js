@@ -1,6 +1,7 @@
 // Pestaña Configuración: modo automático, límites, orquestador, rúbrica, visibilidad, precios, Git y dashboard.
 // El estado vive en dos formularios puros (config-vista.js): config.json y la sección autoMode de settings.json.
 import { el, boton, interruptor, segmentado, confirmar, capitalizar } from './dom.js';
+import { renderMarkdown } from './markdown.js';
 import {
   CLAVES_CONFIG, EJEMPLOS_RUBRICA, MODELOS, ESFUERZOS, LIMITES,
   formularioDesde, reducirFormulario, hayCambios, parcialAGuardar, autoModoDesde, accionPrecio,
@@ -378,7 +379,7 @@ function panelFabrica() {
 function panelCritica() {
   const d = el('div', `panel-critica${critica.error ? ' e-error' : ''}`);
   d.setAttribute('aria-live', 'polite');
-  d.append(el('strong', null, 'Opinión de Claude sobre tus reglas'), el('div', 'texto', critica.texto));
+  d.append(el('strong', null, 'Opinión de Claude sobre tus reglas'), critica.error ? el('div', 'texto', critica.texto) : renderMarkdown(critica.texto));
   return d;
 }
 

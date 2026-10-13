@@ -2,6 +2,7 @@
 import { el, boton, chipModelo, nombreAgente, claseEstado, textoEstado } from './dom.js';
 import { segmentar, estadoEtapas, barreraHumana } from './plan-vista.js';
 import { renderPlan } from './plan.js';
+import { renderMarkdown } from './markdown.js';
 
 const CAMPO = { Bash: 'command', PowerShell: 'command', Read: 'file_path', Write: 'file_path', Edit: 'file_path', MultiEdit: 'file_path', Grep: 'pattern', Glob: 'pattern', WebFetch: 'url', WebSearch: 'query' };
 const DECISION = { permitir: 'Permitiste una vez', siempre: 'Permitido siempre en esta conversación', denegar: 'Denegaste', cancelado: 'Solicitud cancelada' };
@@ -10,6 +11,8 @@ const RESULTADO_MAX = 300;
 const recortar = (t, n) => { const s = String(t ?? ''); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 // Nunca se generan div.texto vacíos.
 const divTexto = (t) => (String(t ?? '').trim() ? el('div', 'texto', String(t).trim()) : null);
+// Texto del orquestador: Markdown renderizado como nodos DOM.
+const divMarkdown = (t, clase) => (String(t ?? '').trim() ? renderMarkdown(String(t).trim(), clase) : null);
 
 export function resumenEntrada(nombre, entrada) {
   const e = entrada && typeof entrada === 'object' ? entrada : {};
@@ -75,7 +78,7 @@ function bloqueTexto(texto, ctx) {
   for (const s of segmentar(texto)) {
     if (s.tipo === 'plan') frag.append(renderPlan(s.plan, estadoEtapas(s.plan, ctx.nodos), { ...ctx.planAcciones, pendiente: ctx.planPendiente }));
     else {
-      const d = divTexto(s.texto);
+      const d = divMarkdown(s.texto);
       if (d) frag.append(d);
       if (s.aviso) frag.append(el('div', 'aviso', s.aviso));
     }
@@ -131,7 +134,7 @@ function renderMensaje(m, ctx) {
     if (b.tipo === 'texto') d.append(bloqueTexto(b.texto, ctx));
     else if (b.tipo === 'herramienta') d.append(bloqueHerramienta(b, ctx));
     else if (b.tipo === 'pensando') {
-      const t = divTexto(b.texto);
+      const t = divMarkdown(b.texto);
       if (!t) continue;
       const det = el('details', 'pensando');
       det.append(el('summary', null, 'Razonamiento'), t);
@@ -190,7 +193,7 @@ export function renderChat(contenedor, chat, ctx) {
   if (barrera) hijos.push(franjaBarrera(barrera, ctx.barreraAcciones));
   if (chat.parcial) {
     const d = el('div', 'msg asistente');
-    d.append(rotuloOrquestador('escribiendo'), el('div', 'texto escribiendo', chat.parcial));
+    d.append(rotuloOrquestador('escribiendo'), divMarkdown(chat.parcial, 'texto md escribiendo') ?? '');
     hijos.push(d);
   } else if (chat.estado === 'trabajando') {
     const d = el('div', 'msg asistente');
