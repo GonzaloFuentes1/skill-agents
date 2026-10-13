@@ -74,7 +74,9 @@ const levantar = async (opciones = {}) => {
   if (opciones.eventosComoDirectorio) mkdirSync(rutaEventos(env));
   const srv = crearServidor({ env, intervaloMs: 20, ...opciones });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  return { srv, puerto: srv.address().port };
+  const puerto = srv.address().port;
+  const r = await fetch(`http://127.0.0.1:${puerto}/?t=${srv.auth.token}`, { redirect: 'manual' });
+  return { srv, puerto, cookie: r.headers.get('set-cookie').split(';')[0] };
 };
 const salud = (puerto) => fetch(`http://127.0.0.1:${puerto}/salud`).then((r) => r.json());
 
@@ -112,9 +114,9 @@ test('I3: necesitaReinicio compara versión y raíz', () => {
 });
 test('I3: sin clientes SSE el servidor avisa inactividad; con un cliente conectado no', async () => {
   let avisos = 0;
-  const { srv, puerto } = await levantar({ inactividadMs: 80, alInactivo: () => { avisos += 1; } });
+  const { srv, puerto, cookie } = await levantar({ inactividadMs: 80, alInactivo: () => { avisos += 1; } });
   try {
-    const cliente = request(`http://127.0.0.1:${puerto}/eventos`);
+    const cliente = request(`http://127.0.0.1:${puerto}/eventos`, { headers: { cookie } });
     cliente.on('error', () => {});
     cliente.end();
     await new Promise((r) => setTimeout(r, 300));
