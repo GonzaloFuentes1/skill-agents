@@ -208,7 +208,7 @@ async function consultarPasos() {
   const terminado = n.estado !== 'activo';
   pasosEnVuelo = true;
   try {
-    const r = await api('GET', `/api/agentes/${encodeURIComponent(c.sessionId)}/${encodeURIComponent(n.agentId)}/pasos?desde=${desde}`);
+    const r = await api('GET', `/api/pasos/${encodeURIComponent(c.sessionId)}/${encodeURIComponent(n.agentId)}?desde=${desde}`);
     if (estado.agente !== agente || estado.desde !== desde) return;
     if (r.siguiente < desde) estado.pasos = [];
     estado.pasos.push(...r.pasos);

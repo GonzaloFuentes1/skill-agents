@@ -44,3 +44,17 @@ export function escucharSse(base, cookie, alEvento) {
   req.end();
   return req;
 }
+
+// Envía el cuerpo tal cual (sin JSON.stringify): para probar JSON mal formado o que no es un objeto.
+export function pedirCrudo(base, ruta, { metodo = 'POST', cuerpo = '', headers = {} } = {}) {
+  return new Promise((ok, mal) => {
+    const req = request(base + ruta, { method: metodo, headers }, (res) => {
+      let t = '';
+      res.setEncoding('utf8');
+      res.on('data', (d) => { t += d; });
+      res.on('end', () => ok({ status: res.statusCode, headers: res.headers, texto: t }));
+    });
+    req.on('error', mal);
+    req.end(cuerpo);
+  });
+}

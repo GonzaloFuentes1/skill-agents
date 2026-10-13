@@ -12,7 +12,7 @@ import { leerEstado } from '../scripts/lib/estado.mjs';
 import { esPrincipal } from '../scripts/lib/hook-io.mjs';
 import { crearSeguidor, parsearLineas, listarSesiones } from './datos.mjs';
 import { crearGestor, ErrorConversacion } from './conversaciones.mjs';
-import { crearAuth, validarRemoto } from './auth.mjs';
+import { crearAuth, validarRemoto, esTodas } from './auth.mjs';
 import { historialDe } from './historial.mjs';
 import { pasosAgente } from './pasos-agente.mjs';
 
@@ -60,7 +60,7 @@ export function carpetasCon(prefijo) {
 // 127.0.0.1: lanzar.mjs consulta /salud y abre el navegador local ahí.
 export function hostsEscucha(remoto = {}) {
   const principal = validarRemoto(remoto);
-  return remoto.activo && !['127.0.0.1', 'localhost', '0.0.0.0', '::'].includes(principal) ? [principal, '127.0.0.1'] : [principal];
+  return remoto.activo && !['127.0.0.1', 'localhost'].includes(principal) && !esTodas(principal) ? [principal, '127.0.0.1'] : [principal];
 }
 
 function leerCuerpo(req) {
@@ -73,7 +73,13 @@ function leerCuerpo(req) {
       if (bytes > MAX_CUERPO) { mal(new ErrorConversacion(413, 'El cuerpo es demasiado grande')); req.resume(); return; }
       texto += d;
     });
-    req.on('end', () => { if (bytes > MAX_CUERPO) return; try { ok(texto ? JSON.parse(texto) : {}); } catch { mal(new ErrorConversacion(400, 'JSON inválido')); } });
+    req.on('end', () => {
+      if (bytes > MAX_CUERPO) return;
+      let v;
+      try { v = texto ? JSON.parse(texto) : {}; } catch { mal(new ErrorConversacion(400, 'JSON inválido')); return; }
+      if (!v || typeof v !== 'object' || Array.isArray(v)) { mal(new ErrorConversacion(400, 'El cuerpo debe ser un objeto JSON')); return; }
+      ok(v);
+    });
     req.on('error', mal);
   });
 }
@@ -104,7 +110,7 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
       }
     } catch { /* un error transitorio no debe tumbar el servidor */ }
   }, intervaloMs);
-  conversaciones.on((e) => { for (const c of clientes) enviar(c, 'chat', e); });
+  const quitarOyente = conversaciones.on((e) => { for (const c of clientes) enviar(c, 'chat', e); });
   const latido = setInterval(() => { for (const c of clientes) c.write(': latido\n\n'); }, LATIDO_MS);
   // Sin pestañas ni conversaciones vivas durante `inactividadMs`, el servidor separado se apaga solo.
   const vigilancia = inactividadMs ? setInterval(() => {
@@ -113,7 +119,9 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
   }, Math.max(20, Math.min(inactividadMs / 2, 60000))) : null;
 
   async function api(req, res, url) {
-    const [, recurso, id, accion, extra] = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+    let partes;
+    try { partes = url.pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch { throw new ErrorConversacion(400, 'Ruta mal codificada'); }
+    const [, recurso, id, accion, extra] = partes;
     if (req.method === 'GET') {
       if (recurso === 'conversaciones' && !id) return json(res, conversaciones.listar());
       if (recurso === 'conversaciones' && accion === 'historial') {
@@ -121,8 +129,8 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
         const h = historialDe(c.sessionId, env);
         return json(res, { conversacion: c, mensajes: h.mensajes, aviso: h.aviso, permisos: conversaciones.pendientesDe(id) });
       }
-      if (recurso === 'agentes' && id && extra === 'pasos') {
-        if (!/^[A-Za-z0-9_-]+$/.test(accion ?? '')) throw new ErrorConversacion(400, 'Identificador de agente inválido');
+      if (recurso === 'pasos' && id && accion && !extra) {
+        if (!/^[A-Za-z0-9_-]+$/.test(accion)) throw new ErrorConversacion(400, 'Identificador de agente inválido');
         const ruta = transcripts.get(`${id}:${accion}`);
         const desde = Number.parseInt(url.searchParams.get('desde') ?? '0', 10) || 0;
         return json(res, ruta ? pasosAgente(ruta, desde) : { pasos: [], siguiente: 0, existe: false });
@@ -156,15 +164,16 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
     if (url.pathname === '/' && url.searchParams.has('t')) {
       const r = auth.canjear(req, url.searchParams.get('t'));
       if (r.status === 302) { res.writeHead(302, { 'set-cookie': r.cookie, location: '/', 'cache-control': 'no-store' }).end(); return; }
-      res.writeHead(r.status, { 'content-type': 'text/plain; charset=utf-8' })
-        .end(r.status === 429 ? 'Demasiados intentos; espera un minuto.' : 'Token inválido. Abre el dashboard con /orquestador:dashboard.');
+      const textos = { 405: 'Método no permitido', 429: 'Demasiados intentos; espera un minuto.' };
+      res.writeHead(r.status, { 'content-type': 'text/plain; charset=utf-8' }).end(textos[r.status] ?? 'Token inválido. Abre el dashboard con /orquestador:dashboard.');
       return;
     }
-    const estatico = req.method === 'GET' ? estaticos[url.pathname] : null;
+    const estatico = req.method === 'GET' || req.method === 'HEAD' ? estaticos[url.pathname] : null;
     if (estatico) {
       let cuerpo;
       try { cuerpo = readFileSync(join(PUBLICO, estatico)); } catch { res.writeHead(500).end('Archivo del dashboard no disponible'); return; }
-      res.writeHead(200, { 'content-type': TIPOS[extname(estatico)], 'cache-control': 'no-store' }).end(cuerpo);
+      res.writeHead(200, { 'content-type': TIPOS[extname(estatico)], 'cache-control': 'no-store', 'content-length': cuerpo.length });
+      res.end(req.method === 'HEAD' ? undefined : cuerpo);
       return;
     }
     const esApi = url.pathname.startsWith('/api/');
@@ -211,11 +220,14 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
     s.listen(puerto, host, () => { s.off('error', mal); extras.push(s); ok(s); });
   });
 
+  servidor.clientesSse = () => clientes.size;
   servidor.detener = async () => {
     clearInterval(tick);
     clearInterval(latido);
     if (vigilancia) clearInterval(vigilancia);
+    if (typeof quitarOyente === 'function') quitarOyente();
     for (const c of clientes) c.end();
+    clientes.clear();
     await conversaciones.apagar();
     await Promise.all([servidor, ...extras].map((s) => {
       s.closeAllConnections?.();

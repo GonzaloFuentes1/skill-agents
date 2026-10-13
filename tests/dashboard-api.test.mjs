@@ -89,14 +89,14 @@ test('pasos de agente: sin transcript conocido existe:false; con agente-inicio e
   const { srv, base, env, home } = await levantar();
   try {
     const cookie = await login(base, srv.auth.token);
-    assert.deepEqual((await pedir(base, '/api/agentes/s1/a1/pasos', { headers: { cookie } })).json(), { pasos: [], siguiente: 0, existe: false });
-    assert.equal((await pedir(base, '/api/agentes/s1/..%2Fx/pasos', { headers: { cookie } })).status, 400);
+    assert.deepEqual((await pedir(base, '/api/pasos/s1/a1', { headers: { cookie } })).json(), { pasos: [], siguiente: 0, existe: false });
+    assert.equal((await pedir(base, '/api/pasos/s1/..%2Fx', { headers: { cookie } })).status, 400);
     const ruta = join(home, 's1', 'subagents', 'agent-a1.jsonl');
     mkdirSync(join(home, 's1', 'subagents'), { recursive: true });
     writeFileSync(ruta, JSON.stringify({ type: 'user', message: { content: 'Haz X' } }) + '\n');
     appendFileSync(rutaEventos(env), JSON.stringify({ session: 's1', tipo: 'agente-inicio', id: 't1', agentId: 'a1', transcript: ruta }) + '\n');
     await new Promise((r) => setTimeout(r, 120));
-    const r = (await pedir(base, '/api/agentes/s1/a1/pasos?desde=0', { headers: { cookie } })).json();
+    const r = (await pedir(base, '/api/pasos/s1/a1?desde=0', { headers: { cookie } })).json();
     assert.deepEqual(r.pasos.map((p) => p.tipo), ['encargo']);
     assert.ok(r.siguiente > 0);
   } finally { await srv.detener(); }
