@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, extname, dirname, basename, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { cargarConfig } from '../scripts/lib/config.mjs';
+import { cargarConfig, guardarConfig } from '../scripts/lib/config.mjs';
 import { rutaEventos } from '../scripts/lib/rutas.mjs';
 import { leerEstado } from '../scripts/lib/estado.mjs';
 import { esPrincipal } from '../scripts/lib/hook-io.mjs';
@@ -15,6 +15,11 @@ import { crearGestor, ErrorConversacion } from './conversaciones.mjs';
 import { crearAuth, validarRemoto, esTodas } from './auth.mjs';
 import { historialDe } from './historial.mjs';
 import { pasosAgente } from './pasos-agente.mjs';
+import { crearAutoModo } from './automodo.mjs';
+import {
+  RAIZ_PLUGIN, listarAgentes, detalleAgente, aplicarPack, activarCatalogo, desactivarCatalogo,
+  crearPersonalizado, editarPersonalizado, eliminarPersonalizado, redactarPrompt,
+} from './agentes.mjs';
 
 export const RAIZ_DASHBOARD = fileURLToPath(new URL('.', import.meta.url)).replace(/[\\/]$/, '');
 export const VERSION = (() => {
@@ -84,10 +89,11 @@ function leerCuerpo(req) {
   });
 }
 
-export function crearServidor({ env = process.env, intervaloMs = 400, inactividadMs = null, alInactivo = () => {}, gestor = null, spawnFn } = {}) {
+export function crearServidor({ env = process.env, intervaloMs = 400, inactividadMs = null, alInactivo = () => {}, gestor = null, spawnFn, spawnCli, raizPlugin = RAIZ_PLUGIN } = {}) {
   const config = cargarConfig(env);
   const auth = crearAuth({ env, remoto: config.remoto });
   const conversaciones = gestor ?? crearGestor({ env, spawnFn });
+  const automodo = crearAutoModo({ env, spawnFn: spawnCli });
   const estaticos = listarEstaticos();
   const seguidor = crearSeguidor(rutaEventos(env), { cola: COLA_INICIAL_BYTES });
   const historial = parsearLineas(seguidor.leerNuevas()).slice(-MAX_HISTORIAL);
@@ -121,37 +127,73 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
   async function api(req, res, url) {
     let partes;
     try { partes = url.pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch { throw new ErrorConversacion(400, 'Ruta mal codificada'); }
-    const [, recurso, id, accion, extra] = partes;
+    const [, recurso, a, b, c] = partes;
+    const q = url.searchParams;
+    // Los agentes del proyecto usan el cwd de una conversación existente: la ruta nunca viene de la petición.
+    const opcionesAgentes = (idConv) => ({ env, raizPlugin, cwdProyecto: idConv ? conversaciones.obtener(String(idConv)).cwd : null });
+
     if (req.method === 'GET') {
-      if (recurso === 'conversaciones' && !id) return json(res, conversaciones.listar());
-      if (recurso === 'conversaciones' && accion === 'historial') {
-        const c = conversaciones.obtener(id);
-        const h = historialDe(c.sessionId, env);
-        return json(res, { conversacion: c, mensajes: h.mensajes, aviso: h.aviso, permisos: conversaciones.pendientesDe(id) });
+      if (recurso === 'conversaciones' && !a) return json(res, conversaciones.listar());
+      if (recurso === 'conversaciones' && b === 'historial' && !c) {
+        const conv = conversaciones.obtener(a);
+        conversaciones.refrescarRama?.(a); // la rama nueva llega por chat:estado
+        const h = historialDe(conv.sessionId, env);
+        return json(res, { conversacion: conv, mensajes: h.mensajes, aviso: h.aviso, permisos: conversaciones.pendientesDe(a), denegados: conversaciones.denegadosDe?.(a) ?? [] });
       }
-      if (recurso === 'pasos' && id && accion && !extra) {
-        if (!/^[A-Za-z0-9_-]+$/.test(accion)) throw new ErrorConversacion(400, 'Identificador de agente inválido');
-        const ruta = transcripts.get(`${id}:${accion}`);
-        const desde = Number.parseInt(url.searchParams.get('desde') ?? '0', 10) || 0;
+      if (recurso === 'pasos' && a && b && !c) {
+        if (!/^[A-Za-z0-9_-]+$/.test(b)) throw new ErrorConversacion(400, 'Identificador de agente inválido');
+        const ruta = transcripts.get(`${a}:${b}`);
+        const desde = Number.parseInt(q.get('desde') ?? '0', 10) || 0;
         return json(res, ruta ? pasosAgente(ruta, desde) : { pasos: [], siguiente: 0, existe: false });
       }
-      if (recurso === 'carpetas') return json(res, carpetasCon(url.searchParams.get('prefijo')));
+      if (recurso === 'carpetas' && !a) return json(res, carpetasCon(q.get('prefijo')));
+      if (recurso === 'config' && !a) return json(res, cargarConfig(env));
+      if (recurso === 'automodo' && !a) return json(res, await automodo.estado());
+      if (recurso === 'automodo' && a === 'fabrica' && !b) return json(res, await automodo.fabrica());
+      if (recurso === 'agentes' && !a) return json(res, listarAgentes(opcionesAgentes(q.get('conversacion'))));
+      if (recurso === 'agentes' && a && b && !c) return json(res, detalleAgente(a, b, opcionesAgentes(q.get('conversacion'))));
       throw new ErrorConversacion(404, 'No encontrado');
     }
     if (req.method !== 'POST') throw new ErrorConversacion(405, 'Método no permitido');
     if (!auth.origenValido(req)) throw new ErrorConversacion(403, 'Origen no permitido');
     const cuerpo = await leerCuerpo(req);
-    if (recurso === 'conversaciones' && !id) return json(res, conversaciones.crear(cuerpo), 201);
+
+    if (recurso === 'conversaciones' && !a) return json(res, conversaciones.crear(cuerpo), 201);
     if (recurso === 'conversaciones') {
-      switch (accion) {
-        case 'mensajes': conversaciones.enviar(id, cuerpo.texto); return json(res, { ok: true }, 202);
-        case 'permisos': conversaciones.responderPermiso(id, extra, cuerpo.decision); return json(res, { ok: true });
-        case 'modo': return json(res, conversaciones.cambiarModo(id, cuerpo.modo));
-        case 'titulo': return json(res, conversaciones.renombrar(id, cuerpo.titulo));
-        case 'interrumpir': conversaciones.interrumpir(id); return json(res, { ok: true });
-        case 'cerrar': conversaciones.cerrar(id); return json(res, { ok: true });
+      switch (b) {
+        case 'mensajes': conversaciones.enviar(a, cuerpo.texto); return json(res, { ok: true }, 202);
+        case 'permisos': conversaciones.responderPermiso(a, c, cuerpo.decision); return json(res, { ok: true });
+        case 'modo': return json(res, conversaciones.cambiarModo(a, cuerpo.modo));
+        case 'titulo': return json(res, conversaciones.renombrar(a, cuerpo.titulo));
+        case 'interrumpir': conversaciones.interrumpir(a); return json(res, { ok: true });
+        case 'cerrar': conversaciones.cerrar(a); return json(res, { ok: true });
         default:
       }
+    }
+    if (recurso === 'config' && !a) {
+      let r;
+      try { r = guardarConfig(cuerpo.parcial, env); } catch (e) { throw new ErrorConversacion(500, `No se pudo guardar la configuración: ${e.message}`); }
+      if (!r.ok) throw new ErrorConversacion(400, 'Hay campos inválidos', { errores: r.errores });
+      // El puerto y el modo remoto se leen al arrancar: cambiarlos exige reiniciar el dashboard.
+      const reiniciar = r.config.puertoDashboard !== config.puertoDashboard || JSON.stringify(r.config.remoto) !== JSON.stringify(config.remoto);
+      return json(res, { config: r.config, reiniciar });
+    }
+    if (recurso === 'automodo') {
+      if (!a) return json(res, await automodo.guardar(cuerpo));
+      if (a === 'critica' && !b) return json(res, await automodo.critica());
+      if (a === 'restablecer' && !b) return json(res, await automodo.restablecer(cuerpo));
+    }
+    if (recurso === 'agentes') {
+      const o = () => opcionesAgentes(cuerpo.conversacion);
+      if (a === 'packs' && b && !c) return json(res, aplicarPack(b, cuerpo.activo, o()));
+      if (a === 'catalogo' && b && !c) {
+        if (typeof cuerpo.activo !== 'boolean') throw new ErrorConversacion(400, 'activo debe ser verdadero o falso');
+        return json(res, cuerpo.activo ? activarCatalogo(b, o()) : desactivarCatalogo(b, o()));
+      }
+      if (a === 'personalizados' && !b) return json(res, crearPersonalizado(cuerpo, o()), 201);
+      if (a === 'personalizados' && b && !c) return json(res, editarPersonalizado(b, cuerpo, o()));
+      if (a === 'personalizados' && b && c === 'eliminar') return json(res, eliminarPersonalizado(b, cuerpo, o()));
+      if (a === 'redactar' && !b) return json(res, await redactarPrompt(cuerpo, { env, spawnFn: spawnCli }));
     }
     throw new ErrorConversacion(404, 'No encontrado');
   }
@@ -202,7 +244,7 @@ export function crearServidor({ env = process.env, intervaloMs = 400, inactivida
   const manejador = (req, res) => {
     atender(req, res).catch((e) => {
       if (res.headersSent) { res.end(); return; }
-      if (e instanceof ErrorConversacion) json(res, { error: e.message }, e.status);
+      if (e instanceof ErrorConversacion) json(res, { error: e.message, ...(e.extra ?? {}) }, e.status);
       else json(res, { error: 'Error interno del dashboard' }, 500);
     });
   };
