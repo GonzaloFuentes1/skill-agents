@@ -13,3 +13,9 @@ export const rutaConfig = (env = process.env) => join(dirBase(env), 'config.json
 export const rutaRaizPlugin = (env = process.env) => join(dirBase(env), 'plugin-root.txt');
 export const rutaConversaciones = (env = process.env) => join(dirBase(env), 'conversaciones.json');
 export const rutaToken = (env = process.env) => join(dirBase(env), 'token');
+
+// Directorio de Claude Code del usuario: respeta CLAUDE_CONFIG_DIR (los tests lo redirigen a un temporal).
+export const dirClaude = (env = process.env) => env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
+export const rutaSettingsUsuario = (env = process.env) => join(dirClaude(env), 'settings.json');
+export const rutaAgentesUsuario = (env = process.env) => join(dirClaude(env), 'agents');
+export const rutaAgentesProyecto = (cwd) => join(cwd, '.claude', 'agents');

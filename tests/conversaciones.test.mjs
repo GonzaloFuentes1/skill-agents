@@ -223,14 +223,15 @@ test('inactividad: un proceso en "lista" se cierra solo y la conversación queda
   assert.deepEqual([g.hayProcesos(), g.obtener(c.id).error], [false, null]);
 });
 
-test('inactividad: no cierra un proceso que está trabajando', async () => {
-  const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT]);
-  const g = crearGestor({ env, spawnFn, inactividadProcesoMs: 50 });
+test('inactividad: no cierra un proceso que volvió a trabajar después de armar el temporizador', async () => {
+  const { env, spawnFn, home } = entorno([ESPERAR_USUARIO, INIT, ...texto('m1', 'a'), fin(), ESPERAR_USUARIO, INIT]);
+  const g = crearGestor({ env, spawnFn, inactividadProcesoMs: 150 });
   const { hasta } = recolector(g);
   const c = g.crear({ cwd: home });
-  g.enviar(c.id, 'x');
-  await hasta((e) => e.tipo === 'chat:estado' && e.conv.sessionId === 'ses-1');
-  await new Promise((r) => setTimeout(r, 250));
+  g.enviar(c.id, 'uno');
+  await hasta((e) => e.tipo === 'chat:fin-turno'); // aquí se arma el temporizador de inactividad
+  g.enviar(c.id, 'dos');
+  await new Promise((r) => setTimeout(r, 400));
   assert.deepEqual([g.hayProcesos(), g.obtener(c.id).estado], [true, 'trabajando']);
   await g.apagar();
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Claude Code falso para tests: reproduce un guion JSONL y registra lo que recibe por stdin.
-// Guion (FALSO_GUION): [{ esperar: 'user'|'control_response'|'control_request' }, { emitir: {...} }, { crudo: '...' }, { salir: 1, stderr: '...' }]
+// Guion (FALSO_GUION): [{ esperar: 'user'|'control_response'|'control_request' }, { emitir: {...} }, { emitirSinSalto: {...} }, { crudo: '...' }, { salir: 1, stderr: '...' }]
 import { readFileSync, appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
@@ -38,6 +38,7 @@ async function correr() {
     if (paso.esperar && (await esperar(paso.esperar)) === null) return;
     if (paso.emitir) process.stdout.write(JSON.stringify(paso.emitir) + '\n');
     if (paso.crudo) process.stdout.write(paso.crudo + '\n');
+    if (paso.emitirSinSalto) process.stdout.write(JSON.stringify(paso.emitirSinSalto)); // última línea sin "\n"
     if (paso.salir !== undefined) {
       if (paso.stderr) process.stderr.write(paso.stderr);
       process.exitCode = paso.salir;

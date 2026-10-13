@@ -1,0 +1,93 @@
+[
+  {
+    "id": "investigacion",
+    "nombre": "Investigación",
+    "descripcion": "Buscar, verificar y sintetizar información con fuentes citadas.",
+    "agentes": ["investigador", "analista-literatura", "verificador-hechos", "investigador-mercado", "investigador-tecnico", "sintetizador"],
+    "nombres": {
+      "investigador": "Investigador", "analista-literatura": "Analista de Literatura", "verificador-hechos": "Verificador de Hechos",
+      "investigador-mercado": "Investigador de Mercado", "investigador-tecnico": "Investigador Técnico", "sintetizador": "Sintetizador"
+    }
+  },
+  {
+    "id": "datos",
+    "nombre": "Datos",
+    "descripcion": "Limpiar, analizar, consultar y visualizar datos con resultados reproducibles.",
+    "agentes": ["analista-datos", "limpiador-datos", "estadistico", "visualizador-datos", "ingeniero-datos", "analista-sql"],
+    "nombres": {
+      "analista-datos": "Analista de Datos", "limpiador-datos": "Limpiador de Datos", "estadistico": "Estadístico",
+      "visualizador-datos": "Visualizador de Datos", "ingeniero-datos": "Ingeniero de Datos", "analista-sql": "Analista SQL"
+    }
+  },
+  {
+    "id": "ml",
+    "nombre": "Machine Learning",
+    "descripcion": "Diseñar, implementar, evaluar y desplegar modelos de ML y RL.",
+    "agentes": ["cientifico-ml", "ingeniero-ml", "evaluador-modelos", "investigador-rl", "optimizador-hiperparametros", "ingeniero-mlops", "critico-papers"],
+    "nombres": {
+      "cientifico-ml": "Científico de ML", "ingeniero-ml": "Ingeniero de ML", "evaluador-modelos": "Evaluador de Modelos",
+      "investigador-rl": "Investigador de RL", "optimizador-hiperparametros": "Optimizador de Hiperparámetros",
+      "ingeniero-mlops": "Ingeniero de MLOps", "critico-papers": "Crítico de Papers"
+    }
+  },
+  {
+    "id": "ingenieria",
+    "nombre": "Ingeniería",
+    "descripcion": "Diseñar, construir, probar y mantener software.",
+    "agentes": ["arquitecto", "implementador", "depurador", "revisor-codigo", "tester", "refactorizador", "optimizador-rendimiento", "documentador-codigo", "migrador"],
+    "nombres": {
+      "arquitecto": "Arquitecto", "implementador": "Implementador", "depurador": "Depurador", "revisor-codigo": "Revisor de Código",
+      "tester": "Tester", "refactorizador": "Refactorizador", "optimizador-rendimiento": "Optimizador de Rendimiento",
+      "documentador-codigo": "Documentador de Código", "migrador": "Migrador"
+    }
+  },
+  {
+    "id": "diseno",
+    "nombre": "Diseño",
+    "descripcion": "Interfaces, piezas visuales, accesibilidad y sistemas de diseño.",
+    "agentes": ["disenador-ui", "disenador-visual", "ingeniero-frontend", "auditor-accesibilidad", "redactor-ux", "disenador-sistemas"],
+    "nombres": {
+      "disenador-ui": "Diseñador UI/UX", "disenador-visual": "Diseñador Visual", "ingeniero-frontend": "Ingeniero Frontend",
+      "auditor-accesibilidad": "Auditor de Accesibilidad", "redactor-ux": "Redactor UX", "disenador-sistemas": "Diseñador de Sistemas de Diseño"
+    }
+  },
+  {
+    "id": "infra",
+    "nombre": "Infraestructura",
+    "descripcion": "CI/CD, nube, seguridad, bases de datos y confiabilidad.",
+    "agentes": ["ingeniero-devops", "ingeniero-cloud", "auditor-seguridad", "revisor-dependencias", "administrador-bd", "ingeniero-sre"],
+    "nombres": {
+      "ingeniero-devops": "Ingeniero DevOps", "ingeniero-cloud": "Ingeniero Cloud", "auditor-seguridad": "Auditor de Seguridad",
+      "revisor-dependencias": "Revisor de Dependencias", "administrador-bd": "Administrador de Bases de Datos", "ingeniero-sre": "Ingeniero SRE"
+    }
+  },
+  {
+    "id": "escritura",
+    "nombre": "Escritura",
+    "descripcion": "Redactar, editar, traducir y adaptar textos.",
+    "agentes": ["redactor", "editor", "traductor", "redactor-tecnico", "redactor-academico", "comunicador"],
+    "nombres": {
+      "redactor": "Redactor", "editor": "Editor", "traductor": "Traductor", "redactor-tecnico": "Redactor Técnico",
+      "redactor-academico": "Redactor Académico", "comunicador": "Comunicador"
+    }
+  },
+  {
+    "id": "negocio",
+    "nombre": "Negocio",
+    "descripcion": "Estrategia, finanzas, producto, usuarios y competencia.",
+    "agentes": ["estratega", "analista-financiero", "product-manager", "investigador-usuarios", "analista-competencia", "redactor-propuestas"],
+    "nombres": {
+      "estratega": "Estratega", "analista-financiero": "Analista Financiero", "product-manager": "Product Manager",
+      "investigador-usuarios": "Investigador de Usuarios", "analista-competencia": "Analista de Competencia", "redactor-propuestas": "Redactor de Propuestas"
+    }
+  },
+  {
+    "id": "operacion",
+    "nombre": "Operación",
+    "descripcion": "Verificar entregables, extraer datos, planificar y ordenar.",
+    "agentes": ["verificador", "extractor", "planificador", "organizador-archivos"],
+    "nombres": {
+      "verificador": "Verificador", "extractor": "Extractor", "planificador": "Planificador", "organizador-archivos": "Organizador de Archivos"
+    }
+  }
+]

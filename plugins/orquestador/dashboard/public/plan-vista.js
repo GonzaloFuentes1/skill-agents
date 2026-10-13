@@ -50,3 +50,37 @@ export function estadoEtapas(plan, nodos = []) {
   }
   return estados;
 }
+
+const APROBACION = 'Apruebo el plan.';
+
+// Barrera humana pendiente: el turno terminó con una pregunta, el plan ya se aprobó y su etapa con barrera humana
+// está en curso, o terminó y la siguiente sigue en cola.
+export function barreraHumana(chat, nodos = []) {
+  if (chat?.estado !== 'lista') return null;
+  const mensajes = chat.mensajes ?? [];
+  const ultimo = mensajes.at(-1);
+  if (ultimo?.rol !== 'asistente') return null;
+  const texto = [...ultimo.bloques].reverse().find((b) => b.tipo === 'texto')?.texto ?? '';
+  if (!texto.trim().endsWith('?')) return null;
+  const iAprobacion = mensajes.findLastIndex((m) => m.rol === 'usuario' && m.bloques.some((b) => b.texto?.trim() === APROBACION));
+  if (iAprobacion < 0) return null;
+  let plan = null;
+  for (let i = iAprobacion - 1; i >= 0 && !plan; i--) {
+    if (mensajes[i].rol !== 'asistente') continue;
+    for (const b of mensajes[i].bloques) {
+      if (b.tipo !== 'texto') continue;
+      const p = segmentar(b.texto).filter((s) => s.tipo === 'plan').at(-1);
+      if (p) plan = p.plan;
+    }
+  }
+  if (!plan) return null;
+  const estados = estadoEtapas(plan, nodos);
+  for (const [i, e] of plan.etapas.entries()) {
+    if (e.barrera?.tipo !== 'humana') continue;
+    const siguiente = plan.etapas[i + 1];
+    if (estados[e.id] === 'trabajando' || (estados[e.id] === 'lista' && (!siguiente || estados[siguiente.id] === 'en-cola'))) {
+      return { etapa: e.id, titulo: e.titulo, criterio: e.barrera.criterio };
+    }
+  }
+  return null;
+}

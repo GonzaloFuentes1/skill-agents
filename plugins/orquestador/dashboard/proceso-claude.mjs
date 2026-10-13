@@ -42,8 +42,14 @@ export function crearNormalizador() {
   return (msg) => {
     if (!msg || typeof msg !== 'object' || (msg.parent_tool_use_id && DE_SUBAGENTE.has(msg.type))) return [];
     switch (msg.type) {
-      case 'system':
-        return msg.subtype === 'init' ? [{ tipo: 'sesion', sessionId: msg.session_id ?? null, modelo: msg.model ?? null }] : [];
+      case 'system': {
+        if (msg.subtype === 'init') return [{ tipo: 'sesion', sessionId: msg.session_id ?? null, modelo: msg.model ?? null }];
+        // Modo automático: el clasificador detuvo una acción (en -p llega como system/permission_denied).
+        if (msg.subtype === 'permission_denied') {
+          return [{ tipo: 'denegado', herramienta: msg.tool_name ?? msg.tool ?? null, entrada: msg.tool_input ?? msg.input ?? {}, motivo: msg.reason ?? msg.message ?? msg.decision_reason ?? null }];
+        }
+        return [];
+      }
       case 'stream_event': {
         const ev = msg.event ?? {};
         if (ev.type === 'message_start') mensajeActual = ev.message?.id ?? null;
@@ -62,7 +68,8 @@ export function crearNormalizador() {
       }
       case 'result': {
         const ok = msg.subtype === 'success' && !msg.is_error;
-        return [{ tipo: 'fin-turno', ok, costoUSD: msg.total_cost_usd ?? null, duracionMs: msg.duration_ms ?? null, error: ok ? null : String(msg.result ?? msg.subtype ?? 'error'), sessionId: msg.session_id ?? null }];
+        const encolados = Number(msg.queued_turn_count) > 0 ? Number(msg.queued_turn_count) : 0;
+        return [{ tipo: 'fin-turno', ok, costoUSD: msg.total_cost_usd ?? null, duracionMs: msg.duration_ms ?? null, error: ok ? null : String(msg.result ?? msg.subtype ?? 'error'), sessionId: msg.session_id ?? null, encolados }];
       }
       case 'control_request': {
         const r = msg.request ?? {};
@@ -108,32 +115,40 @@ export function abrirProceso({ cwd, sessionId = null, modo = 'preguntar', binari
     terminado = true;
     em.emit('evento', { tipo: 'salida', codigo, error });
   };
+  const procesarLinea = (l) => {
+    if (!l.trim()) return;
+    let msg;
+    try { msg = JSON.parse(l); } catch { em.emit('basura', l); return; }
+    for (const e of normalizar(msg)) {
+      if (e.tipo === 'permiso') entradas.set(e.solicitudId, e.entrada);
+      if (e.tipo === 'permiso-cancelado') entradas.delete(e.solicitudId);
+      em.emit('evento', e);
+    }
+  };
   hijo.stdout?.on('data', (d) => {
     const partes = (resto + decodificador.write(d)).split('\n');
     resto = partes.pop();
-    for (const l of partes) {
-      if (!l.trim()) continue;
-      let msg;
-      try { msg = JSON.parse(l); } catch { em.emit('basura', l); continue; }
-      for (const e of normalizar(msg)) {
-        if (e.tipo === 'permiso') entradas.set(e.solicitudId, e.entrada);
-        if (e.tipo === 'permiso-cancelado') entradas.delete(e.solicitudId);
-        em.emit('evento', e);
-      }
-    }
+    for (const l of partes) procesarLinea(l);
   });
   hijo.stderr?.on('data', (d) => { stderr = (stderr + d).slice(-4000); });
   hijo.stdin?.on('error', () => {});
   hijo.on('error', (err) => salir(null, `No se pudo ejecutar Claude Code: ${err.message}`));
-  hijo.on('close', (codigo) => salir(codigo, codigo ? (ultimaLinea(stderr) || `Claude Code terminó con código ${codigo}`) : null));
+  hijo.on('close', (codigo) => {
+    procesarLinea(resto + decodificador.end()); // la última línea puede llegar sin "\n"
+    resto = '';
+    salir(codigo, codigo ? (ultimaLinea(stderr) || `Claude Code terminó con código ${codigo}`) : null);
+  });
 
   const escribir = (obj) => { if (hijo.stdin?.writable) hijo.stdin.write(JSON.stringify(obj) + '\n'); };
   em.pid = hijo.pid ?? null;
   em.enviar = (texto) => escribir(mensajeUsuario(texto));
+  // Un id desconocido (o ya respondido) no se envía: Claude Code no espera esa respuesta.
   em.responderPermiso = (id, { permitir, mensaje } = {}) => {
+    if (!entradas.has(id)) return false;
     const entrada = entradas.get(id);
     entradas.delete(id);
     escribir(respuestaPermiso(id, { permitir, mensaje, entrada }));
+    return true;
   };
   em.cambiarModo = (nuevo) => escribir(pedidoControl(`orq-${++contador}`, { subtype: 'set_permission_mode', mode: MODOS[nuevo] ?? MODOS.preguntar }));
   em.interrumpir = () => escribir(pedidoControl(`orq-${++contador}`, { subtype: 'interrupt' }));

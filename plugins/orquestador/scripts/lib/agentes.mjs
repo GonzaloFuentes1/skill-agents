@@ -25,7 +25,7 @@ function enCacheDePlugins(home, plugin, nombre) {
 }
 
 // "orquestador:x" se busca en este plugin; "otro:x" en la caché de plugins; sin prefijo, en el proyecto y luego en el usuario.
-export function buscarDefinicion(agentType, { raizPlugin, cwd, home = homedir() } = {}) {
+export function buscarDefinicion(agentType, { raizPlugin, cwd, home = homedir(), env = process.env } = {}) {
   const nombre = nombreBase(agentType);
   if (!nombre || !/^[\w-]+$/.test(nombre)) return null;
   const tipo = String(agentType);
@@ -35,7 +35,8 @@ export function buscarDefinicion(agentType, { raizPlugin, cwd, home = homedir() 
     if (!/^[\w-]+$/.test(plugin)) return null;
     candidatos = plugin === PLUGIN_PROPIO ? [raizPlugin && join(raizPlugin, 'agents', `${nombre}.md`)] : enCacheDePlugins(home, plugin, nombre);
   } else {
-    candidatos = [cwd && join(cwd, '.claude', 'agents', `${nombre}.md`), join(home, '.claude', 'agents', `${nombre}.md`)];
+    const dirUsuario = env.CLAUDE_CONFIG_DIR ? join(env.CLAUDE_CONFIG_DIR, 'agents') : join(home, '.claude', 'agents');
+    candidatos = [cwd && join(cwd, '.claude', 'agents', `${nombre}.md`), join(dirUsuario, `${nombre}.md`)];
   }
   for (const ruta of candidatos.filter(Boolean)) {
     try {

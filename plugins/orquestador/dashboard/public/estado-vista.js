@@ -124,7 +124,17 @@ export function posicionOrbital(slot, { porAnillo = 8, radioBase = 0.28, paso = 
   return { x: 0.5 + r * Math.cos(angulo), y: 0.5 + r * Math.sin(angulo), anillo };
 }
 
-export const formatoCosto = (usd) => `$${(usd ?? 0).toFixed((usd ?? 0) >= 1 ? 2 : 3)}`;
+// Modelo y costo del orquestador para la sesión que muestra Actividad. Los datos de la conversación del chat solo valen si es
+// esa misma sesión; si no, el modelo sale del estado del servidor y el costo del orquestador queda como no disponible (null).
+export function orquestadorDeSesion(conv, sesionMostrada, modeloServidor = null) {
+  const misma = !!conv?.sessionId && conv.sessionId === sesionMostrada;
+  return {
+    modelo: (misma ? conv.modelo : null) ?? modeloServidor ?? null,
+    costoUSD: misma ? Number(conv.costoUSD) || 0 : null,
+  };
+}
+
+export const formatoCosto =(usd) => `$${(usd ?? 0).toFixed((usd ?? 0) >= 1 ? 2 : 3)}`;
 export function formatoDuracion(ms) {
   if (!ms) return '—';
   const s = ms / 1000;
@@ -147,4 +157,49 @@ export function conciliarConServidor(sesion, activasServidor, ahoraMs = Date.now
     cambiados.push(id);
   }
   return cambiados;
+}
+
+// ---------- helpers del render de Actividad (entrega 2) ----------
+export const claseNodo = (n) => (n.estado === 'activo' ? 'trabajando' : n.estado === 'fallido' ? 'error' : n.estado === 'sin-cierre' ? 'cola' : 'listo');
+export const TEXTO_NODO = { trabajando: 'Trabajando', listo: 'Listo', error: 'Falló', cola: 'Sin cierre' };
+
+export function etiquetaEvento(t) {
+  switch (t?.tipo) {
+    case 'delegacion': return { texto: 'Delegación', clase: 'e-trabajando' };
+    case 'fin': return t.ok === false ? { texto: 'Falló', clase: 'e-error' } : { texto: 'Fin', clase: 'e-listo' };
+    case 'alerta': return { texto: 'Alerta', clase: 'e-error' };
+    case 'bloqueo': return { texto: 'Bloqueo', clase: 'e-error' };
+    default: return { texto: String(t?.tipo ?? ''), clase: 'e-cola' };
+  }
+}
+
+// "#1", "#2"… solo para agentes que se repiten en la sesión, en orden de delegación.
+export function numeracion(sesion) {
+  const total = {};
+  const visto = {};
+  const out = {};
+  for (const id of sesion.ordenNodos) { const a = sesion.nodos[id].agente; total[a] = (total[a] ?? 0) + 1; }
+  for (const id of sesion.ordenNodos) {
+    const a = sesion.nodos[id].agente;
+    visto[a] = (visto[a] ?? 0) + 1;
+    out[id] = total[a] > 1 ? `#${visto[a]}` : '';
+  }
+  return out;
+}
+
+// Modelo pedido frente al real, agrupado por agente: solo los que ya terminaron con modelo informado.
+export function pedidoVsReal(sesion) {
+  const grupos = new Map();
+  for (const id of sesion?.ordenNodos ?? []) {
+    const n = sesion.nodos[id];
+    if (!n.resultado?.modeloReal) continue;
+    const pedido = familia(n.modelo);
+    const real = familia(n.resultado.modeloReal);
+    const ok = real === pedido || !['haiku', 'sonnet', 'opus', 'fable'].includes(pedido);
+    const clave = `${n.agente}|${pedido}|${real}`;
+    const g = grupos.get(clave) ?? { agente: n.agente, cantidad: 0, pedido, real, ok };
+    g.cantidad += 1;
+    grupos.set(clave, g);
+  }
+  return [...grupos.values()];
 }
