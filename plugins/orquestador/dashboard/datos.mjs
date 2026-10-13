@@ -3,26 +3,36 @@ import { openSync, readSync, fstatSync, closeSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
 
 // Sigue un archivo JSONL por offset: entrega líneas completas y conserva la línea parcial y los bytes UTF-8 cortados.
-export function crearSeguidor(ruta) {
-  let offset = 0;
+// Con `cola`, la primera lectura empieza a `cola` bytes del final (descartando la línea cortada) para no cargar
+// archivos enormes. Un error de E/S (archivo bloqueado, es un directorio…) se trata como "nada nuevo".
+export function crearSeguidor(ruta, { cola = null } = {}) {
+  let offset = null;
   let resto = '';
+  let descartarPrimera = false;
   let decodificador = new StringDecoder('utf8');
   return {
     leerNuevas() {
       let fd;
-      try { fd = openSync(ruta, 'r'); } catch { return []; }
       try {
+        fd = openSync(ruta, 'r');
         const { size } = fstatSync(fd);
-        if (size < offset) { offset = 0; resto = ''; decodificador = new StringDecoder('utf8'); }
+        if (offset === null) {
+          offset = cola != null && size > cola ? size - cola : 0;
+          descartarPrimera = offset > 0;
+        }
+        if (size < offset) { offset = 0; resto = ''; descartarPrimera = false; decodificador = new StringDecoder('utf8'); }
         if (size === offset) return [];
         const buf = Buffer.alloc(size - offset);
         readSync(fd, buf, 0, buf.length, offset);
         offset = size;
         const partes = (resto + decodificador.write(buf)).split('\n');
         resto = partes.pop();
+        if (descartarPrimera && partes.length) { partes.shift(); descartarPrimera = false; }
         return partes.filter((l) => l.trim());
+      } catch {
+        return [];
       } finally {
-        closeSync(fd);
+        if (fd !== undefined) closeSync(fd);
       }
     },
   };

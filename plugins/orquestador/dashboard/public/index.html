@@ -91,7 +91,7 @@
 
   /* Nodos de subagentes */
   .nodo {
-    position: absolute; transform: translate(-50%, -50%); width: 190px; z-index: 2;
+    position: absolute; transform: translate(-50%, -50%); width: 172px; z-index: 2;
     background: var(--panel); border: 1px solid var(--borde); border-left: 4px solid var(--c);
     border-radius: 12px; padding: 8px 10px; box-shadow: var(--sombra);
     transition: left .5s ease, top .5s ease, opacity .4s ease;
@@ -100,6 +100,13 @@
   .nodo.nuevo { animation: aparecer .35s cubic-bezier(.2, .9, .3, 1.3); }
   @keyframes aparecer { from { transform: translate(-50%, -50%) scale(.6); opacity: 0; } }
   .nodo.activo { animation: pulso 1.8s ease-in-out infinite; }
+  .nodo.activo.nuevo { animation: aparecer .35s cubic-bezier(.2, .9, .3, 1.3), pulso 1.8s ease-in-out .35s infinite; }
+  /* Terminados: fichas compactas en el anillo de historial. */
+  .nodo.compacto { width: 140px; padding: 5px 8px; border-radius: 10px; }
+  .nodo.compacto .meta, .nodo.compacto .pie { display: none; }
+  .nodo.compacto .avatar { width: 20px; height: 20px; font-size: 9px; }
+  .nodo.compacto .nombre { font-size: 12px; }
+  .nodo .resumen { margin-left: auto; font-size: 11px; color: var(--suave); white-space: nowrap; }
   @keyframes pulso {
     0%, 100% { box-shadow: var(--sombra), 0 0 0 0 color-mix(in srgb, var(--c) 0%, transparent); }
     50% { box-shadow: var(--sombra), 0 0 0 6px color-mix(in srgb, var(--c) 28%, transparent); }
@@ -172,6 +179,7 @@
   /* Pantallas angostas: va al final para ganar a las reglas base de nodos, centro y tarjetas. */
   @media (max-width: 860px) {
     .nodo { width: 138px; padding: 6px 8px; }
+    .nodo.compacto { width: 116px; }
     .nodo .meta { font-size: 11px; }
     .centro { width: 112px; height: 112px; }
     .tarjeta { width: 200px; }
@@ -219,7 +227,7 @@
 <div id="toast" class="toast" role="status"></div>
 
 <script type="module">
-import { vistaVacia, reducir, posicionOrbital, nodosVisibles, familia, formatoCosto, formatoDuracion, formatoTokens } from './estado-vista.js';
+import { vistaVacia, reducir, posicionOrbital, disposicion, conciliarConServidor, familia, formatoCosto, formatoDuracion, formatoTokens } from './estado-vista.js';
 
 const $ = (id) => document.getElementById(id);
 const escenario = $('escenario');
@@ -275,14 +283,19 @@ function crearNodo(n) {
   return nodo;
 }
 
-function actualizarNodo(nodo, n) {
-  const p = posicionOrbital(n.slot);
+function actualizarNodo(nodo, n, p) {
   nodo.style.left = `${p.x * 100}%`;
   nodo.style.top = `${p.y * 100}%`;
   nodo.style.setProperty('--c', n.color);
+  nodo.classList.toggle('compacto', p.compacto);
   nodo.classList.toggle('activo', n.estado === 'activo');
-  nodo.classList.toggle('terminado', n.estado === 'terminado');
+  nodo.classList.toggle('terminado', n.estado === 'terminado' || n.estado === 'sin-cierre');
   nodo.classList.toggle('fallido', n.estado === 'fallido');
+  let resumen = nodo.querySelector('.resumen');
+  if (p.compacto) {
+    if (!resumen) { resumen = el('span', 'resumen'); nodo.querySelector('.cabeza').append(resumen); }
+    resumen.textContent = n.estado === 'sin-cierre' ? '?' : n.estado === 'fallido' ? '✕' : '✓';
+  } else if (resumen) resumen.remove();
   nodo.classList.toggle('alerta', !!n.alerta);
   nodo.classList.toggle('oculto', ocultos.has(n.id));
   nodo.querySelector('.meta').textContent = n.meta || 'Sin meta';
@@ -290,7 +303,12 @@ function actualizarNodo(nodo, n) {
   pie.replaceChildren(chip(`${familia(n.modelo)}·${n.esfuerzo}`, n.color));
   if (n.resultado) pie.append(el('span', null, `${formatoCosto(n.resultado.costoUSD)} · ${formatoDuracion(n.resultado.duracionMs)}`));
   else if (n.estado === 'activo') pie.append(el('span', null, 'trabajando…'));
-  const tooltip = [n.persona && `Persona: ${n.persona}`, n.origen && `Modelo: ${n.origen}`, n.alerta && `⚠ ${n.alerta}`].filter(Boolean).join('\n');
+  else if (n.estado === 'sin-cierre') pie.append(el('span', null, 'sin cierre'));
+  const tooltip = [
+    n.meta, `${familia(n.modelo)}·${n.esfuerzo}${n.resultado?.modeloReal ? ` → ${n.resultado.modeloReal}` : ''}`,
+    n.resultado && `${formatoCosto(n.resultado.costoUSD)} · ${formatoDuracion(n.resultado.duracionMs)}`,
+    n.persona && `Persona: ${n.persona}`, n.origen && `Modelo: ${n.origen}`, n.alerta && `⚠ ${n.alerta}`,
+  ].filter(Boolean).join('\n');
   if (tooltip) nodo.setAttribute('title', tooltip); else nodo.removeAttribute('title');
   let badge = nodo.querySelector('.badge');
   if (n.alerta && !badge) nodo.append(el('span', 'badge', '⚠'));
@@ -298,18 +316,18 @@ function actualizarNodo(nodo, n) {
 }
 
 function renderNodos(s) {
-  const ids = s ? nodosVisibles(s) : [];
-  const vivos = new Set(ids);
+  const posiciones = s ? disposicion(s) : [];
+  const vivos = new Set(posiciones.map((p) => p.id));
   for (const nodo of [...$('nodos').children]) if (!vivos.has(nodo.dataset.id)) nodo.remove();
   for (const linea of [...svg.querySelectorAll('line')]) if (!vivos.has(linea.dataset.id)) linea.remove();
-  for (const id of ids) {
+  for (const p of posiciones) {
+    const id = p.id;
     const n = s.nodos[id];
     let nodo = $('nodos').querySelector(`[data-id="${CSS.escape(id)}"]`);
     if (!nodo) { nodo = crearNodo(n); $('nodos').append(nodo); }
-    actualizarNodo(nodo, n);
+    actualizarNodo(nodo, n, p);
     let linea = svg.querySelector(`line[data-id="${CSS.escape(id)}"]`);
     if (!linea) { linea = document.createElementNS(NS, 'line'); linea.dataset.id = id; svg.append(linea); }
-    const p = posicionOrbital(n.slot);
     linea.setAttribute('x1', '50'); linea.setAttribute('y1', '50');
     linea.setAttribute('x2', String(p.x * 100)); linea.setAttribute('y2', String(p.y * 100));
     linea.setAttribute('stroke', n.alerta ? 'var(--error)' : n.color);
@@ -325,7 +343,8 @@ function renderStats(s) {
   const fableTope = servidor?.config?.fableMaxPorSesion ?? '?';
   const tarjetas = [
     ['Activos', st.activos], ['Completados', st.completados], ['Fable', `${fableUsados}/${fableTope}`],
-    ['Costo', formatoCosto(st.costoUSD)], ['Alertas', st.alertas, st.alertas > 0], ['Bloqueos', st.bloqueos, st.bloqueos > 0],
+    // El estado del servidor suma toda la sesión; la vista local solo ve los últimos eventos del historial.
+    ['Costo', formatoCosto(Math.max(st.costoUSD, servidor?.estado?.costoUSD ?? 0))], ['Alertas', st.alertas, st.alertas > 0], ['Bloqueos', st.bloqueos, st.bloqueos > 0],
   ];
   $('stats').replaceChildren(...tarjetas.map(([nombre, valor, mal]) => {
     const c = el('div', `stat${mal ? ' alerta' : ''}`);
@@ -425,7 +444,9 @@ function animar(efecto) {
     viajar(tarjetaEnvio(n), px(centro), px(posicionOrbital(n.slot)), () => {
       ocultos.delete(n.id);
       render();
-      $('nodos').querySelector(`[data-id="${CSS.escape(n.id)}"]`)?.classList.add('nuevo');
+      const nodo = $('nodos').querySelector(`[data-id="${CSS.escape(n.id)}"]`);
+      nodo?.classList.add('nuevo');
+      setTimeout(() => nodo?.classList.remove('nuevo'), 400);
     });
   } else if (efecto.tipo === 'volver') {
     const n = s.nodos[efecto.id];
@@ -459,10 +480,18 @@ function procesar(e) {
 }
 
 async function pedirEstado() {
-  if (!actual || actual.startsWith('demo-')) return;
+  const id = actual;
+  if (!id || id.startsWith('demo-')) return;
   try {
-    const r = await fetch(`/estado?session=${encodeURIComponent(actual)}`);
-    if (r.ok) { servidor = await r.json(); renderStats(sesion()); }
+    const r = await fetch(`/estado?session=${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    const datos = await r.json();
+    if (id !== actual) return; // el usuario cambió de sesión mientras se esperaba la respuesta
+    servidor = datos;
+    const s = sesion();
+    // Activos que el servidor ya no tiene (sesión que murió sin cerrar sus delegaciones) dejan de latir.
+    if (!enReplay && s && servidor.estado && conciliarConServidor(s, servidor.estado.activas ?? {}).length) render();
+    else renderStats(s);
   } catch { /* sin servidor: se usan los datos locales */ }
 }
 

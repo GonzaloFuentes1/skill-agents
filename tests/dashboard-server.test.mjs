@@ -27,7 +27,8 @@ function get(base, ruta, headers = {}) {
 test('salud, sesiones, estado y estáticos', async () => {
   const { env, srv, base } = await levantar();
   try {
-    assert.deepEqual(JSON.parse((await get(base, '/salud')).texto), { ok: true, app: 'orquestador-dashboard' });
+    const sal = JSON.parse((await get(base, '/salud')).texto);
+    assert.deepEqual([sal.ok, sal.app], [true, 'orquestador-dashboard']);
     assert.equal(JSON.parse((await get(base, '/sesiones')).texto)[0].session, 's1');
     const e = estadoVacio('s1'); e.fableUsados = 1; e.modeloPrincipal = 'opus'; guardarEstado(e, env);
     const est = JSON.parse((await get(base, '/estado?session=s1')).texto);

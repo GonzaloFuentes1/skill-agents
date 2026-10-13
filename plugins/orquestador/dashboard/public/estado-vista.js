@@ -20,20 +20,34 @@ export function colorDe(agente, color) {
 export const vistaVacia = () => ({ sesiones: {}, orden: [] });
 
 const sesionVacia = (id) => ({
-  id, cwd: null, ultimo: null, nodos: {}, ordenNodos: [], timeline: [],
+  id, cwd: null, ultimo: null, nodos: {}, ordenNodos: [], timeline: [], cierres: 0,
   stats: { activos: 0, completados: 0, costoUSD: 0, alertas: 0, bloqueos: 0, fable: 0 },
 });
 
-// Activos + los últimos `maxTerminados` terminados, en orden de llegada.
-export function nodosVisibles(sesion, maxTerminados = 8) {
+const RADIO_HISTORIAL = 0.44;
+
+// Activos en el anillo interior (por slot) y los últimos `maxTerminados` terminados como fichas compactas
+// en un anillo exterior, el más reciente primero. Coordenadas normalizadas 0..1.
+export function disposicion(sesion, maxTerminados = 8) {
   const ids = sesion.ordenNodos;
-  const terminados = ids.filter((id) => sesion.nodos[id].estado !== 'activo').slice(-maxTerminados);
-  const visibles = new Set([...ids.filter((id) => sesion.nodos[id].estado === 'activo'), ...terminados]);
-  return ids.filter((id) => visibles.has(id));
+  const activos = ids.filter((id) => sesion.nodos[id].estado === 'activo');
+  const terminados = ids.filter((id) => sesion.nodos[id].estado !== 'activo')
+    .sort((a, b) => (sesion.nodos[b].cierre ?? 0) - (sesion.nodos[a].cierre ?? 0))
+    .slice(0, maxTerminados);
+  return [
+    ...activos.map((id) => ({ id, ...posicionOrbital(sesion.nodos[id].slot), compacto: false })),
+    ...terminados.map((id, i) => {
+      const angulo = -Math.PI / 2 + Math.PI / 8 + (2 * Math.PI * i) / 8;
+      return { id, x: 0.5 + RADIO_HISTORIAL * Math.cos(angulo), y: 0.5 + RADIO_HISTORIAL * Math.sin(angulo), anillo: 'historial', compacto: true };
+    }),
+  ];
 }
 
+export const nodosVisibles = (sesion, maxTerminados = 8) => disposicion(sesion, maxTerminados).map((p) => p.id);
+
+// Slot libre en el anillo interior: solo compiten los activos (los terminados se mudan al historial).
 function slotLibre(sesion) {
-  const ocupados = new Set(nodosVisibles(sesion).map((id) => sesion.nodos[id].slot));
+  const ocupados = new Set(sesion.ordenNodos.filter((id) => sesion.nodos[id].estado === 'activo').map((id) => sesion.nodos[id].slot));
   let slot = 0;
   while (ocupados.has(slot)) slot += 1;
   return slot;
@@ -57,7 +71,7 @@ export function reducir(vista, e) {
       s.nodos[e.id] = {
         id: e.id, agente: nombreCorto(e.agente), meta: e.meta ?? '', modelo: e.modelo ?? '—', esfuerzo: e.esfuerzo ?? '—',
         origen: e.origenModelo ?? null, persona: e.persona ?? null, color: colorDe(e.agente, e.color),
-        slot: slotLibre(s), estado: 'activo', alerta: null, resultado: null,
+        slot: slotLibre(s), estado: 'activo', alerta: null, resultado: null, inicioMs: Date.parse(e.ts) || null, cierre: null,
       };
       s.ordenNodos.push(e.id);
       s.stats.activos += 1;
@@ -67,10 +81,13 @@ export function reducir(vista, e) {
     }
     case 'fin': {
       const n = s.nodos[e.id];
-      if (!n || n.estado !== 'activo') return { vista, efecto: null };
+      if (!n || (n.estado !== 'activo' && n.estado !== 'sin-cierre')) return { vista, efecto: null };
+      const eraActivo = n.estado === 'activo';
       n.estado = e.ok === false ? 'fallido' : 'terminado';
+      s.cierres += 1;
+      n.cierre = s.cierres;
       n.resultado = { modeloReal: e.modeloReal ?? null, tokensIn: e.tokensIn ?? 0, tokensOut: e.tokensOut ?? 0, costoUSD: e.costoUSD ?? 0, duracionMs: e.duracionMs ?? 0 };
-      s.stats.activos -= 1;
+      if (eraActivo) s.stats.activos -= 1;
       s.stats.completados += 1;
       s.stats.costoUSD += e.costoUSD ?? 0;
       anotar({ agente: n.agente, texto: n.meta, modelo: e.modeloReal ? familia(e.modeloReal) : '—', costoUSD: e.costoUSD ?? 0, ok: e.ok !== false });
@@ -93,7 +110,7 @@ export function reducir(vista, e) {
 }
 
 // Posición normalizada (0..1) en anillos concéntricos de 8 nodos; el primero arriba del centro.
-export function posicionOrbital(slot, { porAnillo = 8, radioBase = 0.3, paso = 0.13 } = {}) {
+export function posicionOrbital(slot, { porAnillo = 8, radioBase = 0.28, paso = 0.13 } = {}) {
   const anillo = Math.floor(slot / porAnillo);
   const k = slot % porAnillo;
   const angulo = -Math.PI / 2 + (2 * Math.PI * k) / porAnillo + anillo * (Math.PI / porAnillo);
@@ -108,3 +125,20 @@ export function formatoDuracion(ms) {
   return s < 60 ? `${s.toFixed(1)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
 }
 export const formatoTokens = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n ?? 0));
+
+// Delegaciones que la vista cree activas pero el servidor ya no tiene (p. ej. Claude Code murió sin cerrarlas):
+// pasadas `graciaMs` desde su inicio se marcan "sin-cierre" para que no latan para siempre. Devuelve los ids cambiados.
+export function conciliarConServidor(sesion, activasServidor, ahoraMs = Date.now(), graciaMs = 20000) {
+  const cambiados = [];
+  for (const id of sesion.ordenNodos) {
+    const n = sesion.nodos[id];
+    if (n.estado !== 'activo' || (activasServidor && id in activasServidor)) continue;
+    if (n.inicioMs != null && ahoraMs - n.inicioMs < graciaMs) continue;
+    n.estado = 'sin-cierre';
+    sesion.cierres += 1;
+    n.cierre = sesion.cierres;
+    sesion.stats.activos -= 1;
+    cambiados.push(id);
+  }
+  return cambiados;
+}

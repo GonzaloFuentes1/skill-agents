@@ -59,8 +59,9 @@ test('los slots se reutilizan y solo quedan visibles activos + últimos 8 termin
   const visibles = nodosVisibles(s);
   assert.equal(visibles.length, 9);
   assert.ok(visibles.includes('nuevo'));
-  const slots = visibles.map((id) => s.nodos[id].slot);
-  assert.equal(new Set(slots).size, slots.length, 'sin slots repetidos entre visibles');
+  const activos = visibles.filter((id) => s.nodos[id].estado === 'activo');
+  const slots = activos.map((id) => s.nodos[id].slot);
+  assert.equal(new Set(slots).size, slots.length, 'sin slots repetidos entre activos');
   assert.ok(Math.max(...slots) < 9);
 });
 
