@@ -9,7 +9,8 @@ export function verificacion(n) {
   if (!real) return { texto: n.estado === 'activo' ? 'Corriendo' : '—', clase: 'tenue' };
   const pedido = familiaModelo(n.modelo);
   const ok = familiaModelo(real) === pedido || pedido === 'heredado' || pedido === 'desconocido';
-  return { texto: `${ok ? '✓' : '⚠'} ${capitalizar(familiaModelo(real))}`, clase: ok ? 'e-listo' : 'e-error' };
+  const familiaReal = familiaModelo(real);
+  return { texto: `${ok ? '✓' : '⚠'} ${familiaReal === 'desconocido' ? real : capitalizar(familiaReal)}`, clase: ok ? 'e-listo' : 'e-error' };
 }
 
 function leyenda() {

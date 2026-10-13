@@ -148,3 +148,48 @@ export function conciliarConServidor(sesion, activasServidor, ahoraMs = Date.now
   }
   return cambiados;
 }
+
+// ---------- helpers del render de Actividad (entrega 2) ----------
+export const claseNodo = (n) => (n.estado === 'activo' ? 'trabajando' : n.estado === 'fallido' ? 'error' : n.estado === 'sin-cierre' ? 'cola' : 'listo');
+export const TEXTO_NODO = { trabajando: 'Trabajando', listo: 'Listo', error: 'Falló', cola: 'Sin cierre' };
+
+export function etiquetaEvento(t) {
+  switch (t?.tipo) {
+    case 'delegacion': return { texto: 'Delegación', clase: 'e-trabajando' };
+    case 'fin': return t.ok === false ? { texto: 'Falló', clase: 'e-error' } : { texto: 'Fin', clase: 'e-listo' };
+    case 'alerta': return { texto: 'Alerta', clase: 'e-error' };
+    case 'bloqueo': return { texto: 'Bloqueo', clase: 'e-error' };
+    default: return { texto: String(t?.tipo ?? ''), clase: 'e-cola' };
+  }
+}
+
+// "#1", "#2"… solo para agentes que se repiten en la sesión, en orden de delegación.
+export function numeracion(sesion) {
+  const total = {};
+  const visto = {};
+  const out = {};
+  for (const id of sesion.ordenNodos) { const a = sesion.nodos[id].agente; total[a] = (total[a] ?? 0) + 1; }
+  for (const id of sesion.ordenNodos) {
+    const a = sesion.nodos[id].agente;
+    visto[a] = (visto[a] ?? 0) + 1;
+    out[id] = total[a] > 1 ? `#${visto[a]}` : '';
+  }
+  return out;
+}
+
+// Modelo pedido frente al real, agrupado por agente: solo los que ya terminaron con modelo informado.
+export function pedidoVsReal(sesion) {
+  const grupos = new Map();
+  for (const id of sesion?.ordenNodos ?? []) {
+    const n = sesion.nodos[id];
+    if (!n.resultado?.modeloReal) continue;
+    const pedido = familia(n.modelo);
+    const real = familia(n.resultado.modeloReal);
+    const ok = real === pedido || !['haiku', 'sonnet', 'opus', 'fable'].includes(pedido);
+    const clave = `${n.agente}|${pedido}|${real}`;
+    const g = grupos.get(clave) ?? { agente: n.agente, cantidad: 0, pedido, real, ok };
+    g.cantidad += 1;
+    grupos.set(clave, g);
+  }
+  return [...grupos.values()];
+}

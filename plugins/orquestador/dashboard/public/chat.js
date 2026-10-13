@@ -6,9 +6,23 @@ import { renderPlan } from './plan.js';
 const CAMPO = { Bash: 'command', PowerShell: 'command', Read: 'file_path', Write: 'file_path', Edit: 'file_path', MultiEdit: 'file_path', Grep: 'pattern', Glob: 'pattern', WebFetch: 'url', WebSearch: 'query' };
 const DECISION = { permitir: 'Permitiste una vez', siempre: 'Permitido siempre en esta conversación', denegar: 'Denegaste', cancelado: 'Solicitud cancelada' };
 
-export function resumenEntrada(nombre, entrada = {}) {
-  const v = CAMPO[nombre] && entrada[CAMPO[nombre]] != null ? String(entrada[CAMPO[nombre]]) : JSON.stringify(entrada);
+export function resumenEntrada(nombre, entrada) {
+  const e = entrada && typeof entrada === 'object' ? entrada : {};
+  const v = CAMPO[nombre] && e[CAMPO[nombre]] != null ? String(e[CAMPO[nombre]]) : JSON.stringify(e);
   return v.length > 200 ? v.slice(0, 200) : v;
+}
+
+// Tarjeta de una acción que el modo automático detuvo. "Autorizar y reintentar" envía la intención explícita del usuario,
+// que según la documentación de Claude Code anula un soft_deny.
+export function modeloDenegacion(b, alBloquear) {
+  const herramienta = b?.herramienta || 'una acción';
+  const resumen = resumenEntrada(b?.herramienta, b?.entrada);
+  return {
+    titulo: `El modo automático detuvo ${herramienta}`,
+    motivo: b?.motivo || 'El clasificador la consideró riesgosa.',
+    resumen,
+    accion: alBloquear === 'denegar' ? null : { texto: 'Autorizar y reintentar', mensaje: `Autorizo explícitamente esta acción: ${herramienta} ${resumen}. Hazla.` },
+  };
 }
 
 function rotuloOrquestador(extra) {

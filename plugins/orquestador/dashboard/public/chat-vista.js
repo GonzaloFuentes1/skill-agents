@@ -11,11 +11,12 @@ function anotarError(chat) {
   chat.mensajes.push({ rol: 'error', id: `e${chat.mensajes.length}`, bloques: [{ tipo: 'texto', texto: chat.error }] });
 }
 
-export function desdeHistorial({ conversacion, mensajes = [], permisos = [] } = {}) {
+export function desdeHistorial({ conversacion, mensajes = [], permisos = [], denegados = [] } = {}) {
   const chat = {
     mensajes: mensajes.map((m) => ({ ...m, bloques: m.bloques.map((b) => ({ ...b })) })),
     parcial: '', permisos: [...permisos], estado: conversacion?.estado ?? 'inactiva', error: conversacion?.error ?? null,
   };
+  for (const d of denegados) reducirChat(chat, { tipo: 'chat:denegado', ...d });
   anotarError(chat);
   return chat;
 }
@@ -55,6 +56,11 @@ export function reducirChat(chat, e) {
     case 'chat:permiso-resuelto':
       chat.permisos = chat.permisos.filter((p) => p.solicitudId !== e.solicitudId);
       chat.mensajes.push({ rol: 'decision', id: `d-${e.solicitudId}`, bloques: [{ tipo: 'decision', decision: e.decision, herramienta: e.herramienta, entrada: e.entrada ?? {} }] });
+      break;
+    case 'chat:denegado':
+      if (!chat.mensajes.some((m) => m.id === e.id)) {
+        chat.mensajes.push({ rol: 'denegado', id: e.id, bloques: [{ tipo: 'denegado', herramienta: e.herramienta ?? null, entrada: e.entrada ?? {}, motivo: e.motivo ?? null }] });
+      }
       break;
     case 'chat:fin-turno':
       chat.parcial = '';
