@@ -51,7 +51,7 @@ test('config: GET y POST {parcial}; 400 con errores por campo; reiniciar si camb
   const { srv, base, cookie } = await levantar();
   try {
     assert.equal((await pedir(base, '/api/config')).status, 401);
-    assert.equal((await pedir(base, '/api/config', { headers: { cookie } })).json().paraleloMax, 4);
+    assert.equal((await pedir(base, '/api/config', { headers: { cookie } })).json().paraleloMax, 20);
     const ok = await post(base, '/api/config', { parcial: { paraleloMax: 5, mostrarCosto: false } }, cookie);
     assert.deepEqual([ok.status, ok.json().config.paraleloMax, ok.json().config.mostrarCosto, ok.json().reiniciar], [200, 5, false, false]);
     const malo = await post(base, '/api/config', { parcial: { rubrica: [{ clase: 'Mecánica', modelo: 'gpt', esfuerzo: 'low' }] } }, cookie);

@@ -223,8 +223,8 @@ function renderResumen(s) {
     el('span', 'tenue nota', 'Referencial: se calcula con la tabla de precios. Lo cubre tu plan.'));
 
   const limites = bloque('Límites',
-    barraLimite('Agentes en paralelo', st.activos, servidor?.config?.paraleloMax ?? 4, 'e-trabajando'),
-    barraLimite('Fable usados', fableUsados, servidor?.config?.fableMaxPorSesion ?? 2, 'm-fable'));
+    barraLimite('Agentes en paralelo', st.activos, servidor?.config?.paraleloMax ?? 20, 'e-trabajando'),
+    barraLimite('Fable usados', fableUsados, servidor?.config?.fableMaxPorSesion ?? 4, 'm-fable'));
 
   const filas = grupos.map((g) => {
     const f = el('div', 'fila fila-modelo');

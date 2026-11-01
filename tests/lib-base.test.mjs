@@ -20,15 +20,15 @@ test('dirBase respeta ORQUESTADOR_HOME y limpiarId evita rutas peligrosas', () =
 
 test('cargarConfig: valores por defecto, merge con el usuario y JSON roto', () => {
   const env = nuevoEnv();
-  assert.equal(cargarConfig(env).fableMaxPorSesion, 2);
+  assert.equal(cargarConfig(env).fableMaxPorSesion, 4);
   writeFileSync(rutaConfig(env), JSON.stringify({ fableMaxPorSesion: 5, precios: { haiku: { entrada: 9, salida: 9, cacheLectura: 9, cacheEscritura: 9 } } }));
   const c = cargarConfig(env);
   assert.equal(c.fableMaxPorSesion, 5);
-  assert.equal(c.paraleloMax, 4);
+  assert.equal(c.paraleloMax, 20);
   assert.equal(c.precios.haiku.entrada, 9);
   assert.equal(c.precios.opus.entrada, CONFIG_DEFECTO.precios.opus.entrada);
   writeFileSync(rutaConfig(env), '{roto');
-  assert.equal(cargarConfig(env).fableMaxPorSesion, 2);
+  assert.equal(cargarConfig(env).fableMaxPorSesion, 4);
 });
 
 test('familia reconoce alias, IDs completos y heredado', () => {

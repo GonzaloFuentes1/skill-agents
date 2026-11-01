@@ -22,8 +22,8 @@ const TODAS_LAS_INTERFACES = ['0.0.0.0', '::', '[::]', '0:0:0:0:0:0:0:0'];
 
 // Precios en USD por millón de tokens (lista oficial vigente al 2026-10-06; escritura de caché = 1,25× entrada).
 export const CONFIG_DEFECTO = Object.freeze({
-  fableMaxPorSesion: 2,
-  paraleloMax: 4,
+  fableMaxPorSesion: 4,
+  paraleloMax: 20,
   puertoDashboard: 4321,
   modelosOrquestador: ['opus', 'fable'],
   ramasProtegidas: ['main', 'master'],
@@ -146,7 +146,7 @@ function validarRemotoConfig(v) {
 }
 
 const VALIDADORES = {
-  paraleloMax: (v) => (entero(v, 1, 8) ? null : 'Debe ser un entero entre 1 y 8'),
+  paraleloMax: (v) => (entero(v, 1, 20) ? null : 'Debe ser un entero entre 1 y 20'),
   fableMaxPorSesion: (v) => (entero(v, 0, 5) ? null : 'Debe ser un entero entre 0 y 5'),
   conversacionesMax: (v) => (entero(v, 1, 4) ? null : 'Debe ser un entero entre 1 y 4'),
   modelosOrquestador: (v) => (Array.isArray(v) && v.length >= 1 && new Set(v).size === v.length && v.every((m) => MODELOS_ORQUESTADOR.includes(m))
@@ -189,6 +189,25 @@ export function guardarConfig(parcial, env = process.env) {
   if (limpio.precios) nuevo.precios = { ...(esObjeto(base.precios) ? base.precios : {}), ...limpio.precios };
   escribirAtomico(ruta, textoJson(nuevo));
   return { ok: true, config: cargarConfig(env) };
+}
+
+// Versión de los valores de fábrica. Al subirla, migrarDefectos corre una vez por usuario en el próximo SessionStart.
+export const VERSION_DEFECTOS = 2;
+// Topes de fábrica anteriores: asegurarConfig los escribía en config.json, así que quien los tiene exactos los heredó.
+const TOPES_ANTERIORES = Object.freeze({ paraleloMax: 4, fableMaxPorSesion: 2 });
+
+// Una vez por usuario: sube los topes que seguían en los de fábrica anteriores y marca la versión.
+// Devuelve true si migró; false si ya estaba al día o si config.json no se puede leer (no se pisa).
+export function migrarDefectos(env = process.env) {
+  const ruta = rutaConfig(env);
+  const actual = leerJsonUsuario(ruta);
+  if (actual.error) return false;
+  const base = esObjeto(actual.datos) ? actual.datos : {};
+  if (Number.isInteger(base.versionDefectos) && base.versionDefectos >= VERSION_DEFECTOS) return false;
+  const nuevo = { ...base, versionDefectos: VERSION_DEFECTOS };
+  for (const [k, v] of Object.entries(TOPES_ANTERIORES)) if (nuevo[k] === v) nuevo[k] = CONFIG_DEFECTO[k];
+  escribirAtomico(ruta, textoJson(nuevo));
+  return true;
 }
 
 export function asegurarConfig(env = process.env) {

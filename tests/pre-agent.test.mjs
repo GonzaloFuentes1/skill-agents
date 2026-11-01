@@ -57,16 +57,15 @@ test('sin modelo explícito usa el frontmatter; con inherit usa el modelo princi
   assert.equal(r.evento.origenModelo, 'heredado');
 });
 
-test('tope de Fable: la tercera delegación a fable se niega', () => {
+test('tope de Fable: la quinta delegación a fable se niega', () => {
   const e = estadoVacio('s');
-  decidirDelegacion(entrada({ model: 'fable' }, 'a'), e, CONFIG_DEFECTO, null);
-  decidirDelegacion(entrada({ model: 'fable' }, 'b'), e, CONFIG_DEFECTO, null);
-  const r = decidirDelegacion(entrada({ model: 'fable' }, 'c'), e, CONFIG_DEFECTO, null);
+  for (const id of ['a', 'b', 'c', 'd']) assert.equal(decidirDelegacion(entrada({ model: 'fable' }, id), e, CONFIG_DEFECTO, null).denegar, undefined);
+  const r = decidirDelegacion(entrada({ model: 'fable' }, 'e'), e, CONFIG_DEFECTO, null);
   assert.match(r.denegar, /Tope de Fable/);
   assert.equal(r.evento.tipo, 'bloqueo');
   assert.equal(r.evento.regla, 'tope-fable');
-  assert.equal(e.fableUsados, 2);
-  assert.equal(e.activas.c, undefined);
+  assert.equal(e.fableUsados, 4);
+  assert.equal(e.activas.e, undefined);
 });
 
 test('heredar Fable del orquestador cuenta para el tope', () => {

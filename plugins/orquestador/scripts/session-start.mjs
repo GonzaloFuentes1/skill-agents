@@ -5,7 +5,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rutaRaizPlugin } from './lib/rutas.mjs';
 import { emitir } from './lib/eventos.mjs';
-import { cargarConfig, normalizarRubrica, rubricaEsDeFabrica } from './lib/config.mjs';
+import { cargarConfig, normalizarRubrica, rubricaEsDeFabrica, migrarDefectos } from './lib/config.mjs';
 import { ejecutarHook, contexto, esPrincipal } from './lib/hook-io.mjs';
 import { cerrarDeSesion } from './lib/cierres.mjs';
 
@@ -47,4 +47,28 @@ export async function cerrarAlRetomar(entrada, env = process.env) {
   try { return await cerrarDeSesion(entrada.session_id, () => true, 'sesion-retomada', env); } catch { return 0; }
 }
 
-if (esPrincipal(import.meta.url)) ejecutarHook(async (e) => { await cerrarAlRetomar(e); return manejarInicio(e); });
+// Una vez por usuario (al subir VERSION_DEFECTOS): topes nuevos y todo el catálogo de agentes activado.
+// Un agente propio con el mismo nombre que uno del catálogo no se toca. Devuelve el aviso para el usuario, o null.
+export async function aplicarDefectos(env = process.env, raizPlugin = RAIZ_PLUGIN) {
+  if (env.ORQUESTADOR_CANAL === '') return null;
+  try {
+    if (!migrarDefectos(env)) return null;
+    const { cargarCatalogo, activarCatalogo } = await import('../dashboard/agentes.mjs');
+    let activados = 0;
+    for (const id of cargarCatalogo(raizPlugin).keys()) {
+      try { activarCatalogo(id, { env, raizPlugin }); activados++; } catch { /* conflicto con un agente propio */ }
+    }
+    const c = cargarConfig(env);
+    return `orquestador actualizado: hasta ${c.paraleloMax} agentes en paralelo, ${c.fableMaxPorSesion} delegaciones a Fable por sesión `
+      + `y ${activados} agentes del catálogo activados (disponibles desde la próxima sesión).`;
+  } catch { return null; }
+}
+
+if (esPrincipal(import.meta.url)) {
+  ejecutarHook(async (e) => {
+    await cerrarAlRetomar(e);
+    const aviso = await aplicarDefectos();
+    const salida = manejarInicio(e);
+    return aviso && salida ? { ...salida, systemMessage: aviso } : salida;
+  });
+}

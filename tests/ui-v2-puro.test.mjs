@@ -28,8 +28,8 @@ test('formulario: fijar, sumar con límites, alternar sin vaciar, agregar, quita
   let f = formularioDesde(configBase(), CLAVES_CONFIG);
   assert.equal('miClave' in f.actual, false);
   assert.equal(hayCambios(f), false);
-  f = reducirFormulario(f, { tipo: 'sumar', ruta: ['paraleloMax'], delta: 10 });
-  assert.equal(f.actual.paraleloMax, 8);
+  f = reducirFormulario(f, { tipo: 'sumar', ruta: ['paraleloMax'], delta: 30 });
+  assert.equal(f.actual.paraleloMax, 20);
   f = reducirFormulario(f, { tipo: 'sumar', ruta: ['fableMaxPorSesion'], delta: -5 });
   assert.equal(f.actual.fableMaxPorSesion, 0);
   f = reducirFormulario(f, { tipo: 'alternar', ruta: ['modelosOrquestador'], valor: 'opus', minimo: 1, orden: ORDEN });

@@ -11,7 +11,7 @@ Marketplace de Claude Code con el plugin **`orquestador`**. Convierte la sesión
 - **Git estricto** por Bash y por PowerShell: rama por tarea, Conventional Commits, PR con CI, squash-merge y sin coautoría de IA.
 - **Status line** con el orquestador, los subagentes activos, el uso de Fable y el costo.
 - **Dashboard local**: chat con un orquestador propio (permisos con botones, varias conversaciones con historial, planes en pipeline con barreras, avisos del modo automático), detalle en vivo de cada agente, la vista de actividad y las pestañas **Agentes** y **Configuración**. Tema oscuro, con colores que indican el estado y el modelo.
-- **Catálogo de 56 agentes** en 9 packs (investigación, datos, machine learning, ingeniería, diseño, infraestructura, escritura, negocio y operación), cada uno con un prompt profesional y reglas comunes. Se activan por agente o por pack desde el dashboard. También puedes crear los tuyos, con ayuda de "Redactar con Claude".
+- **Catálogo de 56 agentes** en 9 packs (investigación, datos, machine learning, ingeniería, diseño, infraestructura, escritura, negocio y operación), cada uno con un prompt profesional y reglas comunes. Vienen todos activados por defecto y se desactivan por agente o por pack desde el dashboard. También puedes crear los tuyos, con ayuda de "Redactar con Claude".
 
 ## Instalación
 

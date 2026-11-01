@@ -10,7 +10,7 @@ export const EJEMPLOS_RUBRICA = {
 };
 export const MODELOS = ['haiku', 'sonnet', 'opus', 'fable'];
 export const ESFUERZOS = ['low', 'medium', 'high', 'xhigh', 'max'];
-export const LIMITES = { paraleloMax: [1, 8], fableMaxPorSesion: [0, 5], conversacionesMax: [1, 4] };
+export const LIMITES = { paraleloMax: [1, 20], fableMaxPorSesion: [0, 5], conversacionesMax: [1, 4] };
 export const CLAVES_CONFIG = ['paraleloMax', 'fableMaxPorSesion', 'conversacionesMax', 'modelosOrquestador', 'modoPermisoDefecto', 'alBloquear',
   'mostrarCosto', 'alertasModelo', 'rubrica', 'precios', 'ramasProtegidas', 'puertoDashboard', 'remoto'];
 

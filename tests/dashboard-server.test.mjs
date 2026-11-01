@@ -35,7 +35,7 @@ test('salud, sesiones, estado y estáticos', async () => {
     const e = estadoVacio('s1'); e.fableUsados = 1; e.modeloPrincipal = 'opus'; guardarEstado(e, env);
     const est = JSON.parse((await get(base, '/estado?session=s1', { cookie })).texto);
     assert.equal(est.estado.fableUsados, 1);
-    assert.equal(est.config.fableMaxPorSesion, 2);
+    assert.equal(est.config.fableMaxPorSesion, 4);
     const html = await get(base, '/');
     assert.match(html.tipo, /text\/html/);
     assert.match(html.texto, /id="escenario"/);

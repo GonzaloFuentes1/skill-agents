@@ -22,7 +22,7 @@ const conDos = () => {
 
 test('renderLinea muestra orquestador, activos, fable y costo', () => {
   const l = renderLinea({ model: { id: 'claude-opus-5-5' }, cost: { total_cost_usd: 0.4212 } }, conDos(), CONFIG_DEFECTO);
-  assert.equal(l, '🎛 opus │ ▶ investigador-rl (opus·high) ▶ auditor-datos (haiku·low) │ fable 1/2 │ $0.42');
+  assert.equal(l, '🎛 opus │ ▶ investigador-rl (opus·high) ▶ auditor-datos (haiku·low) │ fable 1/4 │ $0.42');
 });
 
 test('renderLinea advierte si el orquestador no está en opus o fable', () => {
