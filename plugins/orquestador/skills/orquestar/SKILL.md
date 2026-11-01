@@ -42,7 +42,7 @@ La `description` del tool Agent es la **meta corta**: es lo que el usuario ve en
 
 ## 4. Paralelismo y revisión
 
-- Paraleliza solo lo que sea independiente, y como máximo el `paraleloMax` de la config (4 por defecto).
+- Paraleliza solo lo que sea independiente, y como máximo el `paraleloMax` de la config (20 por defecto).
 - Revisa cada retorno antes de seguir. Si no alcanza la calidad, re-delega **subiendo un escalón** de la rúbrica; no repitas el mismo encargo con el mismo modelo.
 - Al cerrar una tarea grande, ofrece `/orquestador:estado` para mostrar qué se delegó y cuánto costó.
 

@@ -64,7 +64,7 @@ test('config: una rúbrica editada a mano con valores inválidos cae a fábrica 
 
 test('validarConfig: errores por campo, rangos y enums; ignora claves desconocidas y no editables', () => {
   const { errores, limpio } = validarConfig({
-    paraleloMax: 9, fableMaxPorSesion: 0, conversacionesMax: 1.5, modelosOrquestador: [], modoPermisoDefecto: 'auto',
+    paraleloMax: 21, fableMaxPorSesion: 0, conversacionesMax: 1.5, modelosOrquestador: [], modoPermisoDefecto: 'auto',
     alBloquear: 'quizas', mostrarCosto: 'no', alertasModelo: false, puertoDashboard: 80, ramasProtegidas: ['main', 'rama con espacio'],
     rubrica: RUBRICA_FABRICA.slice(0, 5), precios: { opus: { entrada: 4, salida: 20, cacheLectura: 0.2, cacheEscritura: -1 } },
     remoto: { activo: true, escuchar: '0.0.0.0', hostsPermitidos: [''] }, inventada: 1, rutaClaude: 'x',
@@ -127,7 +127,7 @@ test('config: un config.json editado a mano con tipos inválidos cae al valor de
   }));
   const c = cargarConfig(env);
   assert.deepEqual(c.ramasProtegidas, ['main', 'master']);
-  assert.equal(c.paraleloMax, 4);
+  assert.equal(c.paraleloMax, 20);
   assert.equal(c.fableMaxPorSesion, 1, 'los válidos se conservan');
   assert.deepEqual(c.modelosOrquestador, ['opus', 'fable']);
   assert.equal(c.conversacionesMax, 2);
