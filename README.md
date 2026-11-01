@@ -1,5 +1,28 @@
 # skill-agents
 
+[![ci](https://github.com/GonzaloFuentes1/skill-agents/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/GonzaloFuentes1/skill-agents/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+## Summary (English)
+
+This repository is a Claude Code plugin marketplace that ships one plugin, **`orquestador`**. It turns the main session into an orchestrator that delegates work to subagents, and it makes each delegation visible and checkable. The documentation below the summary is written in Spanish.
+
+- **Routing by model and effort.** The `orquestar` skill gives the orchestrator an explicit rubric with six task classes, from mechanical work (`haiku` / `low`) to maximum-consequence decisions (`fable` / `high`). The skill instructs the orchestrator to pass `subagent_type`, `model` and `effort` explicitly on every delegation. The rubric can be edited in the dashboard.
+- **Limits.** A PreToolUse hook denies a delegation when the per-session Fable cap (`fableMaxPorSesion`, default 2) or the parallel subagent cap (`paraleloMax`, default 4) is reached.
+- **Logging and mismatch alerts.** Hooks record, for each delegation, the requested model and effort, the model that actually ran (read from the subagent transcript), token counts and cost. Cost is computed from a price table in the configuration. If the actual model family differs from the requested one, the plugin logs an alert event and shows a warning in the terminal (the terminal warning can be turned off with `alertasModelo`).
+- **Strict git flow.** Hooks for Bash and PowerShell, plus optional git hooks installed by `/orquestador:setup`, enforce one branch per task, Conventional Commits, no direct commit, push or force-push to protected branches, no `--no-verify`, squash-merge only for `gh pr merge`, and no AI attribution in commits or pull requests.
+- **Live dashboard.** A local web UI (default `http://127.0.0.1:4321/`) shows each agent with its requested and actual model, effort, tokens and cost. It also offers a chat with an orchestrator, a plan view, configuration, and a catalog of 56 predefined agents.
+
+Requirements: Claude Code 2.1.170 or later, and Node 20 or later. To install:
+
+```
+/plugin marketplace add GonzaloFuentes1/skill-agents
+/plugin install orquestador@skill-agents
+/orquestador:setup
+```
+
+## Documentación (español)
+
 Marketplace de Claude Code con el plugin **`orquestador`**. Convierte la sesión principal (Opus o Fable) en un orquestador que delega a subagentes con personalidad. Elige el **modelo y el esfuerzo** de cada delegación según una rúbrica explícita, verifica qué modelo corrió de verdad y lo muestra todo en vivo.
 
 > Estado: fases 1 (núcleo) y 2 (dashboard v2: chat, actividad, configuración y catálogo de agentes) listas. Sigue el benchmark de eficiencia. Diseño: [docs/specs/2026-10-12-orquestador-design.md](docs/specs/2026-10-12-orquestador-design.md).
