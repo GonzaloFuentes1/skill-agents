@@ -59,7 +59,7 @@ test('hooks.json solo referencia scripts que existen', () => {
   }
 });
 
-test('la skill orquestar documenta planes, catálogo y verificador; la versión es 0.4.0 en plugin y marketplace', () => {
+test('la skill orquestar documenta planes, catálogo y verificador; la versión es 0.5.0 en plugin y marketplace', () => {
   const skill = readFileSync(join(PLUGIN, 'skills', 'orquestar', 'SKILL.md'), 'utf8');
   assert.match(skill, /## 5\. Planes en pipeline/);
   assert.match(skill, /orquestador-plan/);
@@ -72,5 +72,27 @@ test('la skill orquestar documenta planes, catálogo y verificador; la versión 
   const plugin = leerJson(join(PLUGIN, '.claude-plugin', 'plugin.json'));
   const entrada = leerJson(join(RAIZ, '.claude-plugin', 'marketplace.json')).plugins.find((x) => x.name === 'orquestador');
   assert.equal(entrada.version, plugin.version);
-  assert.equal(plugin.version, '0.4.0');
+  assert.equal(plugin.version, '0.5.0');
+});
+
+test('la skill juegos enlaza referencias que existen y nombra solo agentes del catálogo', () => {
+  const dir = join(PLUGIN, 'skills', 'juegos');
+  const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
+  const enlaces = [...skill.matchAll(/\]\((referencias\/[a-z0-9-]+\.md)\)/g)].map((m) => m[1]);
+  assert.ok(enlaces.length >= 5, 'faltan enlaces a las referencias');
+  for (const e of enlaces) assert.ok(existsSync(join(dir, e)), `no existe ${e}`);
+  const enDisco = listar(join(dir, 'referencias'), (x) => x.endsWith('.md')).map((x) => `referencias/${x}`).sort();
+  assert.deepEqual([...new Set(enlaces)].sort(), enDisco, 'cada referencia en disco debe estar enlazada desde SKILL.md');
+  const packs = leerJson(join(PLUGIN, 'catalogo', 'packs.json'));
+  const ids = new Set(packs.flatMap((p) => p.agentes));
+  const juegos = packs.find((p) => p.id === 'juegos');
+  assert.ok(juegos, 'falta el pack juegos');
+  for (const id of juegos.agentes) assert.ok(skill.includes(`\`${id}\``), `la skill no menciona ${id}`);
+  const textos = [skill, ...enDisco.map((r) => readFileSync(join(dir, r), 'utf8'))];
+  for (const texto of textos) {
+    assert.doesNotMatch(texto, /\r/, 'usa LF como fin de línea');
+    for (const m of texto.matchAll(/`((?:critico|implementador|disenador|director|ilustrador|auditor|revisor|analista|arquitecto|investigador)(?:-[a-z]+)*)`/g)) {
+      assert.ok(ids.has(m[1]), `${m[1]} no es un agente del catálogo`);
+    }
+  }
 });

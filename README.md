@@ -11,7 +11,7 @@ This repository is a Claude Code plugin marketplace that ships one plugin, **`or
 - **Limits.** A PreToolUse hook denies a delegation when the per-session Fable cap (`fableMaxPorSesion`, default 4) or the parallel subagent cap (`paraleloMax`, default 20) is reached.
 - **Logging and mismatch alerts.** Hooks record, for each delegation, the requested model and effort, the model that actually ran (read from the subagent transcript), token counts and cost. Cost is computed from a price table in the configuration. If the actual model family differs from the requested one, the plugin logs an alert event and shows a warning in the terminal (the terminal warning can be turned off with `alertasModelo`).
 - **Strict git flow.** Hooks for Bash and PowerShell, plus optional git hooks installed by `/orquestador:setup`, enforce one branch per task, Conventional Commits, no direct commit, push or force-push to protected branches, no `--no-verify`, squash-merge only for `gh pr merge`, and no AI attribution in commits or pull requests.
-- **Live dashboard.** A local web UI (default `http://127.0.0.1:4321/`) shows each agent with its requested and actual model, effort, tokens and cost. It also offers a chat with an orchestrator, a plan view, configuration, and a catalog of 56 predefined agents, all enabled by default.
+- **Live dashboard.** A local web UI (default `http://127.0.0.1:4321/`) shows each agent with its requested and actual model, effort, tokens and cost. It also offers a chat with an orchestrator, a plan view, configuration, and a catalog of 69 predefined agents in 10 packs (the newest one is for game development), all enabled by default. A second skill, `juegos`, documents a phase-by-phase workflow for building a game with subagents.
 
 Requirements: Claude Code 2.1.170 or later, and Node 20 or later. To install:
 
@@ -34,7 +34,8 @@ Marketplace de Claude Code con el plugin **`orquestador`**. Convierte la sesión
 - **Git estricto** por Bash y por PowerShell: rama por tarea, Conventional Commits, PR con CI, squash-merge y sin coautoría de IA.
 - **Status line** con el orquestador, los subagentes activos, el uso de Fable y el costo.
 - **Dashboard local**: chat con un orquestador propio (permisos con botones, varias conversaciones con historial, planes en pipeline con barreras, avisos del modo automático), detalle en vivo de cada agente, la vista de actividad y las pestañas **Agentes** y **Configuración**. Tema oscuro, con colores que indican el estado y el modelo.
-- **Catálogo de 56 agentes** en 9 packs (investigación, datos, machine learning, ingeniería, diseño, infraestructura, escritura, negocio y operación), cada uno con un prompt profesional y reglas comunes. Vienen todos activados por defecto y se desactivan por agente o por pack desde el dashboard. También puedes crear los tuyos, con ayuda de "Redactar con Claude".
+- **Catálogo de 69 agentes** en 10 packs (investigación, datos, machine learning, ingeniería, diseño, infraestructura, escritura, negocio, operación y juegos), cada uno con un prompt profesional y reglas comunes. Vienen todos activados por defecto y se desactivan por agente o por pack desde el dashboard. También puedes crear los tuyos, con ayuda de "Redactar con Claude".
+- **Skill `juegos`**: el flujo por fases para hacer un juego con subagentes (reglas, motor, interfaz, balance con bots, críticos simulados, arte, audio y versión de prueba), con referencias de lo aprendido en un caso real y listas de comprobación. Usa los 13 agentes del pack de juegos.
 
 ## Instalación
 
