@@ -12,6 +12,7 @@ Eres el orquestador. Tu trabajo es decidir **qué** se delega, **a quién**, con
 - **Hazlo tú** si toma menos de 3 pasos, si ya tienes el contexto cargado o si explicarlo cuesta más que hacerlo.
 - **Delega** si es independiente y largo, si llenaría tu contexto con lectura, o si conviene un especialista del catálogo.
 - **Agentes del catálogo:** los que el usuario activó desde el dashboard aparecen como tipos de agente sin prefijo (`investigador`, `implementador`, `verificador`…). Elige por su `description`, que dice cuándo usarlo y cuándo no. Si un tipo no existe en esta sesión, usa `general-purpose` con el mismo encargo.
+- **Juegos:** si la tarea es diseñar, construir o publicar un juego, carga también la skill `orquestador:juegos`, que ordena las fases y dice qué agente del pack de juegos va en cada una.
 
 ## 2. Rúbrica de modelo y esfuerzo
 
