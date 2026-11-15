@@ -89,5 +89,18 @@
     "nombres": {
       "verificador": "Verificador", "extractor": "Extractor", "planificador": "Planificador", "organizador-archivos": "Organizador de Archivos"
     }
+  },
+  {
+    "id": "juegos",
+    "nombre": "Juegos",
+    "descripcion": "Diseñar, construir, balancear, criticar y vestir un juego, de las reglas a la versión de prueba.",
+    "agentes": ["disenador-mecanicas", "arquitecto-motor", "implementador-reglas", "implementador-interfaz-juego", "analista-balance", "revisor-diseno", "auditor-dominio", "critico-jugador-nuevo", "critico-veterano", "critico-carga-cognitiva", "director-visual", "ilustrador-vectorial", "disenador-audio"],
+    "nombres": {
+      "disenador-mecanicas": "Diseñador de Mecánicas", "arquitecto-motor": "Arquitecto de Motor", "implementador-reglas": "Implementador de Reglas",
+      "implementador-interfaz-juego": "Implementador de Interfaz de Juego", "analista-balance": "Analista de Balance",
+      "revisor-diseno": "Revisor de Diseño", "auditor-dominio": "Auditor de Dominio",
+      "critico-jugador-nuevo": "Crítico Jugador Nuevo", "critico-veterano": "Crítico Veterano", "critico-carga-cognitiva": "Crítico de Carga Cognitiva",
+      "director-visual": "Director Visual", "ilustrador-vectorial": "Ilustrador Vectorial", "disenador-audio": "Diseñador de Audio"
+    }
   }
 ]

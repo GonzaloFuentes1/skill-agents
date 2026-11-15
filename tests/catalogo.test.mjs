@@ -12,7 +12,7 @@ const CONTENIDO_COMPLETO = true;
 const PLUGIN = fileURLToPath(new URL('../plugins/orquestador/', import.meta.url));
 const packs = JSON.parse(readFileSync(join(PLUGIN, 'catalogo', 'packs.json'), 'utf8'));
 const ids = packs.flatMap((p) => p.agentes);
-const PACKS = ['investigacion', 'datos', 'ml', 'ingenieria', 'diseno', 'infra', 'escritura', 'negocio', 'operacion'];
+const PACKS = ['investigacion', 'datos', 'ml', 'ingenieria', 'diseno', 'infra', 'escritura', 'negocio', 'operacion', 'juegos'];
 const MODELOS = ['haiku', 'sonnet', 'opus', 'fable', 'inherit'];
 const ESFUERZOS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const TOOLS = ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'WebSearch', 'WebFetch', 'NotebookEdit'];
@@ -20,11 +20,11 @@ const COLORES = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', '
 const ORDEN = [/^Persona: \S/m, /^## Rol$/m, /^## Método$/m, /^## Entregable$/m, /^## Restricciones$/m, /^## Formato de retorno$/m, /^## REGLAS CRÍTICAS$/m];
 const palabras = (t) => t.split(/\s+/).filter(Boolean).length;
 
-test('packs.json: 9 packs en orden y 56 agentes con ids kebab únicos y nombre visible', () => {
+test('packs.json: 10 packs en orden y 69 agentes con ids kebab únicos y nombre visible', () => {
   assert.deepEqual(packs.map((p) => p.id), PACKS);
-  assert.deepEqual(packs.map((p) => p.agentes.length), [6, 6, 7, 9, 6, 6, 6, 6, 4]);
-  assert.equal(ids.length, 56);
-  assert.equal(new Set(ids).size, 56);
+  assert.deepEqual(packs.map((p) => p.agentes.length), [6, 6, 7, 9, 6, 6, 6, 6, 4, 13]);
+  assert.equal(ids.length, 69);
+  assert.equal(new Set(ids).size, 69);
   for (const p of packs) {
     assert.ok(p.nombre && p.descripcion, `${p.id}: falta nombre o descripcion`);
     for (const id of p.agentes) {
